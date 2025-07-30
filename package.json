@@ -1,0 +1,15 @@
+{
+  "name": "diablo2-clone",
+  "version": "1.0.0",
+  "description": "A Diablo 2 clone prototype using Phaser.js",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -c-1 -p 8080"
+  },
+  "keywords": ["game", "phaser", "diablo", "rpg"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

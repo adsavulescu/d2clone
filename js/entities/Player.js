@@ -1,0 +1,732 @@
+class Player extends Phaser.Physics.Arcade.Sprite {
+    constructor(scene, x, y) {
+        super(scene, x, y, 'player');
+        
+        scene.add.existing(this);
+        scene.physics.add.existing(this);
+        
+        this.setCollideWorldBounds(true);
+        this.setScale(1);
+        this.setDepth(200); // Ensure player is above everything including town hall
+        
+        // Movement direction tracking
+        this.currentDirection = 'down';
+        this.lastVelocity = { x: 0, y: 0 };
+        
+        // Setup directional animations
+        this.setupAnimations();
+        
+        // Invulnerability for transitions
+        this.isInvulnerable = false;
+        
+        // Experience and Level System
+        this.level = 1;
+        this.experience = 0;
+        this.experienceToNext = 100;
+        
+        // Core Stats (Diablo 2 style)
+        this.baseStats = {
+            strength: 10,
+            dexterity: 10,
+            vitality: 10,
+            energy: 10
+        };
+        
+        this.allocatedStats = {
+            strength: 0,
+            dexterity: 0,
+            vitality: 0,
+            energy: 0
+        };
+        
+        this.statPoints = 0;
+        this.skillPoints = 0;
+        
+        // Equipment slots - must be defined before updateDerivedStats()
+        this.equipment = {
+            helmet: null,
+            armor: null,
+            weapon: null,
+            shield: null,
+            boots: null,
+            gloves: null,
+            belt: null,
+            ring1: null,
+            ring2: null,
+            amulet: null
+        };
+        
+        // Calculate derived stats
+        this.updateDerivedStats();
+        
+        // Current health/mana (separate from max)
+        this.health = this.maxHealth;
+        this.mana = this.maxMana;
+        
+        // Skills system - 6 sorcerer skills with stat scaling
+        this.skills = {
+            fireball: {
+                level: 1,
+                maxLevel: 20,
+                cooldown: 500,
+                lastUsed: 0,
+                baseDamage: 10,
+                damagePerLevel: 5,
+                baseManaCost: 5,
+                manaCostPerLevel: 1,
+                statScaling: { energy: 0.2 }
+            },
+            frostNova: {
+                level: 0,
+                maxLevel: 20,
+                cooldown: 3000,
+                lastUsed: 0,
+                baseDamage: 8,
+                damagePerLevel: 3,
+                baseManaCost: 15,
+                manaCostPerLevel: 2,
+                baseRadius: 100,
+                radiusPerLevel: 10,
+                statScaling: { energy: 0.15 }
+            },
+            teleport: {
+                level: 0,
+                maxLevel: 20,
+                cooldown: 2000,
+                lastUsed: 0,
+                baseManaCost: 20,
+                manaCostPerLevel: 1,
+                statScaling: { energy: 0.1 }
+            },
+            chainLightning: {
+                level: 0,
+                maxLevel: 20,
+                cooldown: 1000,
+                lastUsed: 0,
+                baseDamage: 12,
+                damagePerLevel: 4,
+                baseManaCost: 12,
+                manaCostPerLevel: 2,
+                baseChains: 3,
+                chainsPerLevel: 0.2,
+                statScaling: { energy: 0.25 }
+            },
+            iceBolt: {
+                level: 0,
+                maxLevel: 20,
+                cooldown: 300,
+                lastUsed: 0,
+                baseDamage: 6,
+                damagePerLevel: 3,
+                baseManaCost: 3,
+                manaCostPerLevel: 1,
+                baseAccuracy: 70,
+                accuracyPerLevel: 1.5,
+                statScaling: { energy: 0.1, dexterity: 0.3 }
+            },
+            meteor: {
+                level: 0,
+                maxLevel: 20,
+                cooldown: 4000,
+                lastUsed: 0,
+                baseDamage: 25,
+                damagePerLevel: 8,
+                baseManaCost: 30,
+                manaCostPerLevel: 3,
+                baseImpact: 80,
+                impactPerLevel: 5,
+                statScaling: { energy: 0.2, strength: 0.4 }
+            }
+        };
+        
+        // Inventory system - redesigned for better space utilization
+        this.inventory = {
+            width: 8,
+            height: 5,
+            items: new Array(40).fill(null)
+        };
+        
+        // Equipment slots already defined above
+        
+        // Hotbar for skills/items (8 slots: 0-5 for keys 1-6, 6-7 for LMB/RMB)
+        this.hotbar = new Array(8).fill(null);
+        
+        // Default skill assignments - all skills available but gated by skill level
+        this.hotbar[0] = { type: 'skill', name: 'fireball' };      // Key 1 - Fireball (starts at level 1)
+        this.hotbar[1] = { type: 'skill', name: 'frostNova' };     // Key 2 - Frost Nova (unlocked via skill points)
+        this.hotbar[2] = { type: 'skill', name: 'teleport' };      // Key 3 - Teleport (unlocked via skill points)
+        this.hotbar[3] = { type: 'skill', name: 'chainLightning' }; // Key 4 - Chain Lightning
+        this.hotbar[4] = { type: 'skill', name: 'iceBolt' };       // Key 5 - Ice Bolt
+        this.hotbar[5] = { type: 'skill', name: 'meteor' };        // Key 6 - Meteor
+        this.hotbar[6] = { type: 'action', name: 'move' };      // LMB (default move)
+        this.hotbar[7] = { type: 'skill', name: 'fireball' };   // RMB (default attack)
+        
+        // Add some starter items to inventory
+        this.inventory.items[0] = Item.createPotion('health', 1);
+        this.inventory.items[1] = Item.createPotion('mana', 1);
+        this.inventory.items[2] = Item.createPotion('health', 1);
+        this.inventory.items[3] = Item.createPotion('mana', 1);
+        this.inventory.items[4] = Item.generateRandomItem(1);
+        
+        // Add potions to hotbar slots for easy access
+        this.hotbar[3] = { type: 'item', item: this.inventory.items[0] }; // Key 4 - Health potion
+        this.hotbar[4] = { type: 'item', item: this.inventory.items[1] }; // Key 5 - Mana potion
+        
+        this.createHealthBar();
+        this.createManaBar();
+    }
+    
+    setupAnimations() {
+        // Create animations for different directions
+        if (!this.scene.anims.exists('sorcerer_walk_down')) {
+            this.scene.anims.create({
+                key: 'sorcerer_walk_down',
+                frames: [{ key: 'sorcerer_down' }],
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+        
+        if (!this.scene.anims.exists('sorcerer_walk_up')) {
+            this.scene.anims.create({
+                key: 'sorcerer_walk_up',
+                frames: [{ key: 'sorcerer_up' }],
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+        
+        if (!this.scene.anims.exists('sorcerer_walk_left')) {
+            this.scene.anims.create({
+                key: 'sorcerer_walk_left',
+                frames: [{ key: 'sorcerer_left' }],
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+        
+        if (!this.scene.anims.exists('sorcerer_walk_right')) {
+            this.scene.anims.create({
+                key: 'sorcerer_walk_right',
+                frames: [{ key: 'sorcerer_right' }],
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+        
+        if (!this.scene.anims.exists('sorcerer_idle')) {
+            this.scene.anims.create({
+                key: 'sorcerer_idle',
+                frames: [{ key: 'sorcerer_down' }],
+                frameRate: 1,
+                repeat: 0
+            });
+        }
+        
+        // Start with idle animation
+        this.play('sorcerer_idle');
+    }
+    
+    createHealthBar() {
+        this.healthBar = this.scene.add.graphics();
+        this.healthBar.setDepth(210); // Ensure health bar is visible above player
+        this.updateHealthBar();
+    }
+    
+    createManaBar() {
+        this.manaBar = this.scene.add.graphics();
+        this.manaBar.setDepth(210); // Ensure mana bar is visible above player
+        this.updateManaBar();
+    }
+    
+    updateDerivedStats() {
+        // Calculate equipment bonuses
+        const equipmentBonuses = this.calculateEquipmentBonuses();
+        
+        // Calculate total stats (base + allocated + equipment)
+        const totalStrength = this.baseStats.strength + this.allocatedStats.strength + equipmentBonuses.strength;
+        const totalDexterity = this.baseStats.dexterity + this.allocatedStats.dexterity + equipmentBonuses.dexterity;
+        const totalVitality = this.baseStats.vitality + this.allocatedStats.vitality + equipmentBonuses.vitality;
+        const totalEnergy = this.baseStats.energy + this.allocatedStats.energy + equipmentBonuses.energy;
+        
+        // Store total stats for UI display
+        this.totalStats = {
+            strength: totalStrength,
+            dexterity: totalDexterity,
+            vitality: totalVitality,
+            energy: totalEnergy
+        };
+        
+        // Calculate max health (base 50 + 4 per vitality + 2 per level + equipment life)
+        this.maxHealth = 50 + (totalVitality * 4) + (this.level * 2) + equipmentBonuses.life;
+        
+        // Calculate max mana (base 20 + 2 per energy + 1 per level + equipment mana)
+        this.maxMana = 20 + (totalEnergy * 2) + this.level + equipmentBonuses.mana;
+        
+        // Calculate defense (equipment armor + dexterity bonus)
+        this.defense = equipmentBonuses.armor + Math.floor(totalDexterity * 0.25);
+        
+        // Calculate attack rating (base 50 + dexterity bonus + level bonus)
+        this.attackRating = 50 + (totalDexterity * 5) + (this.level * 3);
+        
+        // Calculate damage (base weapon damage + strength bonus + equipment damage)
+        this.minDamage = 1 + Math.floor(totalStrength * 0.1) + equipmentBonuses.damage;
+        this.maxDamage = 3 + Math.floor(totalStrength * 0.15) + equipmentBonuses.damage;
+        
+        // Calculate movement speed (base 200 + dexterity bonus + equipment bonus)
+        this.speed = 200 + (totalDexterity * 2) + equipmentBonuses.moveSpeed;
+        
+        // Calculate resistances (equipment bonuses)
+        this.resistances = {
+            fire: equipmentBonuses.resistance.fire,
+            cold: equipmentBonuses.resistance.cold,
+            lightning: equipmentBonuses.resistance.lightning,
+            poison: equipmentBonuses.resistance.poison
+        };
+        
+        // Calculate cast and attack speeds
+        this.attackSpeed = 100 + equipmentBonuses.attackSpeed;
+        this.castSpeed = 100 + equipmentBonuses.castSpeed;
+        
+        // Ensure current health/mana don't exceed new maximums
+        this.health = Math.min(this.health, this.maxHealth);
+        this.mana = Math.min(this.mana, this.maxMana);
+    }
+    
+    calculateEquipmentBonuses() {
+        const bonuses = {
+            strength: 0,
+            dexterity: 0,
+            vitality: 0,
+            energy: 0,
+            life: 0,
+            mana: 0,
+            damage: 0,
+            armor: 0,
+            attackSpeed: 0,
+            castSpeed: 0,
+            moveSpeed: 0,
+            resistance: {
+                fire: 0,
+                cold: 0,
+                lightning: 0,
+                poison: 0
+            }
+        };
+        
+        // Sum up bonuses from all equipped items
+        Object.values(this.equipment).forEach(item => {
+            if (item && item.properties) {
+                bonuses.strength += item.properties.strength || 0;
+                bonuses.dexterity += item.properties.dexterity || 0;
+                bonuses.vitality += item.properties.vitality || 0;
+                bonuses.energy += item.properties.energy || 0;
+                bonuses.life += item.properties.life || 0;
+                bonuses.mana += item.properties.mana || 0;
+                bonuses.damage += item.properties.damage || 0;
+                bonuses.armor += item.properties.armor || 0;
+                bonuses.attackSpeed += item.properties.attackSpeed || 0;
+                bonuses.castSpeed += item.properties.castSpeed || 0;
+                bonuses.moveSpeed += item.properties.moveSpeed || 0;
+                
+                if (item.properties.resistance) {
+                    bonuses.resistance.fire += item.properties.resistance.fire || 0;
+                    bonuses.resistance.cold += item.properties.resistance.cold || 0;
+                    bonuses.resistance.lightning += item.properties.resistance.lightning || 0;
+                    bonuses.resistance.poison += item.properties.resistance.poison || 0;
+                }
+            }
+        });
+        
+        return bonuses;
+    }
+    
+    gainExperience(amount) {
+        this.experience += amount;
+        
+        while (this.experience >= this.experienceToNext && this.level < 99) {
+            this.levelUp();
+        }
+    }
+    
+    levelUp() {
+        this.experience -= this.experienceToNext;
+        this.level++;
+        
+        // Award stat and skill points
+        this.statPoints += 5;
+        this.skillPoints += 1;
+        
+        // Increase experience requirement for next level
+        this.experienceToNext = Math.floor(this.experienceToNext * 1.1);
+        
+        // Update derived stats
+        this.updateDerivedStats();
+        
+        // Heal player on level up
+        this.health = this.maxHealth;
+        this.mana = this.maxMana;
+        
+        // Visual level up effect
+        const levelUpText = this.scene.add.text(this.x, this.y - 50, 'LEVEL UP!', {
+            fontSize: '24px',
+            fill: '#ffff00',
+            fontWeight: 'bold',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5).setDepth(1000);
+        
+        // Animate the text upward and fade out
+        this.scene.tweens.add({
+            targets: levelUpText,
+            y: levelUpText.y - 30,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => {
+                levelUpText.destroy();
+            }
+        });
+    }
+    
+    allocateStat(statName) {
+        if (this.statPoints > 0) {
+            this.allocatedStats[statName]++;
+            this.statPoints--;
+            this.updateDerivedStats();
+            return true;
+        }
+        return false;
+    }
+    
+    upgradeSkill(skillName) {
+        const skill = this.skills[skillName];
+        if (skill && this.skillPoints > 0 && skill.level < skill.maxLevel) {
+            skill.level++;
+            this.skillPoints--;
+            return true;
+        }
+        return false;
+    }
+    
+    getSkillDamage(skillName) {
+        const skill = this.skills[skillName];
+        if (!skill || skill.level === 0) return 0;
+        
+        let damage = skill.baseDamage + (skill.damagePerLevel * (skill.level - 1));
+        
+        // Apply stat scaling bonuses
+        if (skill.statScaling) {
+            Object.keys(skill.statScaling).forEach(stat => {
+                const statValue = this.totalStats[stat] || 0;
+                const scalingFactor = skill.statScaling[stat];
+                damage += Math.floor(statValue * scalingFactor);
+            });
+        }
+        
+        return Math.max(1, damage);
+    }
+    
+    getSkillManaCost(skillName) {
+        const skill = this.skills[skillName];
+        if (!skill || skill.level === 0) return 0;
+        
+        return skill.baseManaCost + (skill.manaCostPerLevel * (skill.level - 1));
+    }
+    
+    getSkillRadius(skillName) {
+        const skill = this.skills[skillName];
+        if (!skill || skill.level === 0) return 0;
+        
+        return skill.baseRadius + (skill.radiusPerLevel * (skill.level - 1));
+    }
+    
+    getSkillChains(skillName) {
+        const skill = this.skills[skillName];
+        if (!skill || skill.level === 0) return 0;
+        
+        return Math.floor(skill.baseChains + (skill.chainsPerLevel * (skill.level - 1)));
+    }
+    
+    getSkillAccuracy(skillName) {
+        const skill = this.skills[skillName];
+        if (!skill || skill.level === 0) return 0;
+        
+        let accuracy = skill.baseAccuracy + (skill.accuracyPerLevel * (skill.level - 1));
+        
+        // Apply dexterity bonus for accuracy
+        if (skill.statScaling && skill.statScaling.dexterity) {
+            accuracy += this.totalStats.dexterity * 0.5;
+        }
+        
+        return Math.min(accuracy, 100); // Cap at 100% accuracy
+    }
+    
+    getSkillImpact(skillName) {
+        const skill = this.skills[skillName];
+        if (!skill || skill.level === 0) return 0;
+        
+        let impact = skill.baseImpact + (skill.impactPerLevel * (skill.level - 1));
+        
+        // Apply strength bonus for impact area
+        if (skill.statScaling && skill.statScaling.strength) {
+            impact += this.totalStats.strength * 0.3;
+        }
+        
+        return impact;
+    }
+    
+    updateHealthBar() {
+        if (!this.healthBar) return;
+        
+        this.healthBar.clear();
+        
+        // Background (black border)
+        this.healthBar.fillStyle(0x000000, 1);
+        this.healthBar.fillRect(this.x - 21, this.y - 31, 42, 8);
+        
+        // Health bar background (dark red)
+        this.healthBar.fillStyle(0x330000, 1);
+        this.healthBar.fillRect(this.x - 20, this.y - 30, 40, 6);
+        
+        // Health bar fill (bright red)
+        const healthPercent = this.health / this.maxHealth;
+        if (healthPercent > 0) {
+            this.healthBar.fillStyle(0xff0000, 1);
+            this.healthBar.fillRect(this.x - 20, this.y - 30, 40 * healthPercent, 6);
+        }
+    }
+    
+    updateManaBar() {
+        if (!this.manaBar) return;
+        
+        this.manaBar.clear();
+        
+        // Background (black border)
+        this.manaBar.fillStyle(0x000000, 1);
+        this.manaBar.fillRect(this.x - 21, this.y - 23, 42, 6);
+        
+        // Mana bar background (dark blue)
+        this.manaBar.fillStyle(0x000033, 1);
+        this.manaBar.fillRect(this.x - 20, this.y - 22, 40, 4);
+        
+        // Mana bar fill (bright blue)
+        const manaPercent = this.mana / this.maxMana;
+        if (manaPercent > 0) {
+            this.manaBar.fillStyle(0x0088ff, 1);
+            this.manaBar.fillRect(this.x - 20, this.y - 22, 40 * manaPercent, 4);
+        }
+    }
+    
+    update(targetPosition) {
+        let newVelocityX = 0;
+        let newVelocityY = 0;
+        
+        if (targetPosition && Phaser.Math.Distance.Between(this.x, this.y, targetPosition.x, targetPosition.y) > 10) {
+            const angle = Phaser.Math.Angle.Between(this.x, this.y, targetPosition.x, targetPosition.y);
+            newVelocityX = Math.cos(angle) * this.speed;
+            newVelocityY = Math.sin(angle) * this.speed;
+            this.setVelocity(newVelocityX, newVelocityY);
+        } else {
+            this.setVelocity(0);
+        }
+        
+        // Update direction and animation based on movement
+        this.updateDirectionAndAnimation(newVelocityX, newVelocityY);
+        
+        this.updateHealthBar();
+        this.updateManaBar();
+        
+        this.mana = Math.min(this.maxMana, this.mana + 0.1);
+    }
+    
+    updateDirectionAndAnimation(velocityX, velocityY) {
+        const isMoving = Math.abs(velocityX) > 5 || Math.abs(velocityY) > 5;
+        
+        if (isMoving) {
+            let newDirection = this.currentDirection;
+            
+            // Determine primary direction based on velocity
+            if (Math.abs(velocityX) > Math.abs(velocityY)) {
+                // Horizontal movement is primary
+                newDirection = velocityX > 0 ? 'right' : 'left';
+            } else {
+                // Vertical movement is primary  
+                newDirection = velocityY > 0 ? 'down' : 'up';
+            }
+            
+            // Update direction and animation if changed
+            if (newDirection !== this.currentDirection) {
+                this.currentDirection = newDirection;
+                this.play(`sorcerer_walk_${newDirection}`);
+            } else if (!this.anims.isPlaying) {
+                // Resume walking animation if it stopped
+                this.play(`sorcerer_walk_${newDirection}`);
+            }
+        } else {
+            // Player stopped moving - play idle animation
+            if (this.anims.currentAnim && this.anims.currentAnim.key !== 'sorcerer_idle') {
+                this.play('sorcerer_idle');
+            }
+        }
+        
+        // Store velocity for next frame
+        this.lastVelocity.x = velocityX;
+        this.lastVelocity.y = velocityY;
+    }
+    
+    castFireball(targetX, targetY) {
+        const skill = this.skills.fireball;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('fireball');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('fireball');
+        new Fireball(this.scene, this.x, this.y, targetX, targetY, damage);
+        return true;
+    }
+    
+    castFrostNova() {
+        const skill = this.skills.frostNova;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('frostNova');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('frostNova');
+        const radius = this.getSkillRadius('frostNova');
+        new FrostNova(this.scene, this.x, this.y, damage, radius);
+        return true;
+    }
+    
+    castTeleport(targetX, targetY) {
+        const skill = this.skills.teleport;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('teleport');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        // Teleport effect
+        this.setPosition(targetX, targetY);
+        
+        // Visual teleport effect
+        const teleportEffect = this.scene.add.graphics();
+        teleportEffect.fillStyle(0x0088ff, 0.8);
+        teleportEffect.fillCircle(targetX, targetY, 30);
+        teleportEffect.setDepth(100);
+        
+        this.scene.time.delayedCall(300, () => {
+            teleportEffect.destroy();
+        });
+        
+        return true;
+    }
+    
+    castChainLightning() {
+        const skill = this.skills.chainLightning;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('chainLightning');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('chainLightning');
+        const chains = this.getSkillChains('chainLightning');
+        const targets = this.scene.enemies.getChildren();
+        
+        new ChainLightning(this.scene, this.x, this.y, targets, damage, chains);
+        return true;
+    }
+    
+    castIceBolt(targetX, targetY) {
+        const skill = this.skills.iceBolt;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('iceBolt');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('iceBolt');
+        const accuracy = this.getSkillAccuracy('iceBolt');
+        
+        new IceBolt(this.scene, this.x, this.y, targetX, targetY, damage, accuracy);
+        return true;
+    }
+    
+    castMeteor(targetX, targetY) {
+        const skill = this.skills.meteor;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('meteor');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('meteor');
+        const impact = this.getSkillImpact('meteor');
+        
+        new Meteor(this.scene, this.x, this.y, targetX, targetY, damage, impact);
+        return true;
+    }
+    
+    takeDamage(amount) {
+        // Don't take damage if invulnerable (during transitions)
+        if (this.isInvulnerable) {
+            return;
+        }
+        
+        this.health -= amount;
+        this.health = Math.max(0, this.health);
+        
+        this.scene.tweens.add({
+            targets: this,
+            alpha: 0.5,
+            duration: 100,
+            yoyo: true,
+            repeat: 2
+        });
+        
+        if (this.health <= 0) {
+            this.destroy();
+        }
+    }
+    
+    destroy() {
+        if (this.healthBar) this.healthBar.destroy();
+        if (this.manaBar) this.manaBar.destroy();
+        super.destroy();
+    }
+}
