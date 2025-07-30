@@ -47,6 +47,11 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
         
         // Collision with enemies
         scene.physics.add.overlap(this, scene.enemies, (bolt, enemy) => {
+            // Check if enemy is still valid before interacting with it
+            if (!enemy || !enemy.active || !enemy.scene) {
+                return;
+            }
+            
             enemy.takeDamage(this.damage);
             enemy.freeze(1500); // Shorter freeze than Frost Nova
             this.shatter();

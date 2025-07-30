@@ -34,6 +34,11 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
         this.particles = particles;
         
         scene.physics.add.overlap(this, scene.enemies, (fireball, enemy) => {
+            // Check if enemy is still valid before interacting with it
+            if (!enemy || !enemy.active || !enemy.scene) {
+                return;
+            }
+            
             enemy.takeDamage(this.damage);
             this.explode();
         });

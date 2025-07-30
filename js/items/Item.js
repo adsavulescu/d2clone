@@ -87,10 +87,15 @@ class Item {
                 this.stackable = true;
                 this.maxStackSize = 20;
                 this.stackSize = 1;
-                if (this.name === 'Health Potion') {
-                    this.healAmount = 50 + (this.level * 10);
-                } else if (this.name === 'Mana Potion') {
-                    this.manaAmount = 30 + (this.level * 8);
+                
+                // Calculate healing amounts based on tier
+                const tier = this.level;
+                if (this.name.includes('Healing')) {
+                    // Health potions: base 30, +20 per tier
+                    this.healAmount = 30 + (tier * 20);
+                } else if (this.name.includes('Mana')) {
+                    // Mana potions: base 20, +15 per tier
+                    this.manaAmount = 20 + (tier * 15);
                 }
                 break;
         }
@@ -171,11 +176,27 @@ class Item {
     
     use(player) {
         if (this.type === 'potion') {
-            if (this.name === 'Health Potion') {
-                player.health = Math.min(player.maxHealth, player.health + this.healAmount);
+            const currentTime = player.scene.time.now;
+            
+            if (this.name.includes('Healing')) {
+                // Check health potion cooldown
+                if (!player.canUseHealthPotion()) {
+                    return false; // Still on cooldown
+                }
+                
+                // Add gradual healing over time
+                player.addHealingOverTime(this.healAmount, 2000); // 2 seconds duration
+                player.lastHealthPotionUsed = currentTime;
                 return true;
-            } else if (this.name === 'Mana Potion') {
-                player.mana = Math.min(player.maxMana, player.mana + this.manaAmount);
+            } else if (this.name.includes('Mana')) {
+                // Check mana potion cooldown
+                if (!player.canUseManaPotion()) {
+                    return false; // Still on cooldown
+                }
+                
+                // Add gradual mana restoration over time
+                player.addManaRestoreOverTime(this.manaAmount, 2000); // 2 seconds duration
+                player.lastManaPotionUsed = currentTime;
                 return true;
             }
         }
@@ -228,11 +249,29 @@ class Item {
     }
     
     static createPotion(type, level = 1) {
-        const potionNames = {
-            'health': 'Health Potion',
-            'mana': 'Mana Potion'
+        const potionTiers = {
+            1: { prefix: 'Minor', color: '#cccccc' },
+            2: { prefix: 'Lesser', color: '#cccccc' },
+            3: { prefix: 'Light', color: '#4444ff' },
+            4: { prefix: 'Healing', color: '#4444ff' },
+            5: { prefix: 'Greater', color: '#ffff44' },
+            6: { prefix: 'Super', color: '#ffff44' },
+            7: { prefix: 'Full', color: '#8b4513' },
+            8: { prefix: 'Perfect', color: '#8b4513' }
         };
         
-        return new Item('potion', potionNames[type], level);
+        const tier = Math.min(8, Math.max(1, level));
+        const tierInfo = potionTiers[tier];
+        
+        const potionNames = {
+            'health': `${tierInfo.prefix} Healing Potion`,
+            'mana': `${tierInfo.prefix} Mana Potion`
+        };
+        
+        const potion = new Item('potion', potionNames[type], level);
+        potion.potionTier = tier;
+        potion.tierColor = tierInfo.color;
+        
+        return potion;
     }
 }

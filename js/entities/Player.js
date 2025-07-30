@@ -42,6 +42,14 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.statPoints = 0;
         this.skillPoints = 0;
         
+        // Potion system with separate cooldowns
+        this.healthPotionCooldown = 1500; // 1.5 seconds cooldown for health potions
+        this.manaPotionCooldown = 1500; // 1.5 seconds cooldown for mana potions
+        this.lastHealthPotionUsed = 0;
+        this.lastManaPotionUsed = 0;
+        this.healingOverTime = [];
+        this.manaRestoreOverTime = [];
+        
         // Equipment slots - must be defined before updateDerivedStats()
         this.equipment = {
             helmet: null,
@@ -76,6 +84,15 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 manaCostPerLevel: 1,
                 statScaling: { energy: 0.2 }
             },
+            teleport: {
+                level: 0,
+                maxLevel: 20,
+                cooldown: 2000,
+                lastUsed: 0,
+                baseManaCost: 20,
+                manaCostPerLevel: 1,
+                statScaling: { energy: 0.1 }
+            },
             frostNova: {
                 level: 0,
                 maxLevel: 20,
@@ -88,15 +105,6 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 baseRadius: 100,
                 radiusPerLevel: 10,
                 statScaling: { energy: 0.15 }
-            },
-            teleport: {
-                level: 0,
-                maxLevel: 20,
-                cooldown: 2000,
-                lastUsed: 0,
-                baseManaCost: 20,
-                manaCostPerLevel: 1,
-                statScaling: { energy: 0.1 }
             },
             chainLightning: {
                 level: 0,
@@ -141,39 +149,113 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         
         // Inventory system - redesigned for better space utilization
         this.inventory = {
-            width: 8,
-            height: 5,
-            items: new Array(40).fill(null)
+            width: 6,
+            height: 7,
+            items: new Array(42).fill(null)
         };
         
         // Equipment slots already defined above
         
-        // Hotbar for skills/items (8 slots: 0-5 for keys 1-6, 6-7 for LMB/RMB)
-        this.hotbar = new Array(8).fill(null);
+        // New hotbar system - separated into three sections
+        this.potionHotbar = new Array(2).fill(null);     // Q and E keys for potions
+        this.mouseHotbar = new Array(3).fill(null);      // LMB, MMB, RMB
+        this.skillsHotbar = new Array(4).fill(null);     // Keys 1-4 for skills
         
-        // Default skill assignments - all skills available but gated by skill level
-        this.hotbar[0] = { type: 'skill', name: 'fireball' };      // Key 1 - Fireball (starts at level 1)
-        this.hotbar[1] = { type: 'skill', name: 'frostNova' };     // Key 2 - Frost Nova (unlocked via skill points)
-        this.hotbar[2] = { type: 'skill', name: 'teleport' };      // Key 3 - Teleport (unlocked via skill points)
-        this.hotbar[3] = { type: 'skill', name: 'chainLightning' }; // Key 4 - Chain Lightning
-        this.hotbar[4] = { type: 'skill', name: 'iceBolt' };       // Key 5 - Ice Bolt
-        this.hotbar[5] = { type: 'skill', name: 'meteor' };        // Key 6 - Meteor
-        this.hotbar[6] = { type: 'action', name: 'move' };      // LMB (default move)
-        this.hotbar[7] = { type: 'skill', name: 'fireball' };   // RMB (default attack)
+        // Default assignments
+        this.mouseHotbar[0] = { type: 'action', name: 'move' };        // LMB - Move
+        this.mouseHotbar[1] = null;                                    // MMB - Empty
+        this.mouseHotbar[2] = { type: 'skill', name: 'fireball' };     // RMB - Fireball
         
-        // Add some starter items to inventory
-        this.inventory.items[0] = Item.createPotion('health', 1);
-        this.inventory.items[1] = Item.createPotion('mana', 1);
-        this.inventory.items[2] = Item.createPotion('health', 1);
-        this.inventory.items[3] = Item.createPotion('mana', 1);
-        this.inventory.items[4] = Item.generateRandomItem(1);
+        // Clear skills hotbar since we reduced available skills
+        this.skillsHotbar[0] = null;
+        this.skillsHotbar[1] = null;
+        this.skillsHotbar[2] = null;
+        this.skillsHotbar[3] = null;
         
-        // Add potions to hotbar slots for easy access
-        this.hotbar[3] = { type: 'item', item: this.inventory.items[0] }; // Key 4 - Health potion
-        this.hotbar[4] = { type: 'item', item: this.inventory.items[1] }; // Key 5 - Mana potion
+        // Add starter potions to hotbar
+        const healingPotion = Item.createPotion('health', 1); // Minor Healing Potion
+        healingPotion.stackSize = 5;
+        this.potionHotbar[0] = { type: 'item', item: healingPotion };
         
-        this.createHealthBar();
-        this.createManaBar();
+        const manaPotion = Item.createPotion('mana', 1); // Minor Mana Potion  
+        manaPotion.stackSize = 5;
+        this.potionHotbar[1] = { type: 'item', item: manaPotion };
+    }
+    
+    addHealingOverTime(amount, duration) {
+        const healPerTick = amount / (duration / 100); // Heal every 100ms
+        const ticksRemaining = duration / 100;
+        
+        this.healingOverTime.push({
+            healPerTick: healPerTick,
+            ticksRemaining: ticksRemaining,
+            lastTick: this.scene.time.now
+        });
+    }
+    
+    addManaRestoreOverTime(amount, duration) {
+        const manaPerTick = amount / (duration / 100); // Restore every 100ms
+        const ticksRemaining = duration / 100;
+        
+        this.manaRestoreOverTime.push({
+            manaPerTick: manaPerTick,
+            ticksRemaining: ticksRemaining,
+            lastTick: this.scene.time.now
+        });
+    }
+    
+    updatePotionEffects() {
+        const currentTime = this.scene.time.now;
+        
+        // Process healing over time
+        for (let i = this.healingOverTime.length - 1; i >= 0; i--) {
+            const effect = this.healingOverTime[i];
+            
+            if (currentTime - effect.lastTick >= 100) { // 100ms intervals
+                this.health = Math.min(this.maxHealth, this.health + effect.healPerTick);
+                effect.ticksRemaining--;
+                effect.lastTick = currentTime;
+                
+                if (effect.ticksRemaining <= 0) {
+                    this.healingOverTime.splice(i, 1);
+                }
+            }
+        }
+        
+        // Process mana restoration over time
+        for (let i = this.manaRestoreOverTime.length - 1; i >= 0; i--) {
+            const effect = this.manaRestoreOverTime[i];
+            
+            if (currentTime - effect.lastTick >= 100) { // 100ms intervals
+                this.mana = Math.min(this.maxMana, this.mana + effect.manaPerTick);
+                effect.ticksRemaining--;
+                effect.lastTick = currentTime;
+                
+                if (effect.ticksRemaining <= 0) {
+                    this.manaRestoreOverTime.splice(i, 1);
+                }
+            }
+        }
+    }
+    
+    canUseHealthPotion() {
+        const currentTime = this.scene.time.now;
+        return currentTime - this.lastHealthPotionUsed >= this.healthPotionCooldown;
+    }
+    
+    canUseManaPotion() {
+        const currentTime = this.scene.time.now;
+        return currentTime - this.lastManaPotionUsed >= this.manaPotionCooldown;
+    }
+    
+    getHealthPotionCooldownRemaining() {
+        const currentTime = this.scene.time.now;
+        return Math.max(0, this.healthPotionCooldown - (currentTime - this.lastHealthPotionUsed));
+    }
+    
+    getManaPotionCooldownRemaining() {
+        const currentTime = this.scene.time.now;
+        return Math.max(0, this.manaPotionCooldown - (currentTime - this.lastManaPotionUsed));
     }
     
     setupAnimations() {
@@ -227,17 +309,6 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.play('sorcerer_idle');
     }
     
-    createHealthBar() {
-        this.healthBar = this.scene.add.graphics();
-        this.healthBar.setDepth(210); // Ensure health bar is visible above player
-        this.updateHealthBar();
-    }
-    
-    createManaBar() {
-        this.manaBar = this.scene.add.graphics();
-        this.manaBar.setDepth(210); // Ensure mana bar is visible above player
-        this.updateManaBar();
-    }
     
     updateDerivedStats() {
         // Calculate equipment bonuses
@@ -476,47 +547,6 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         return impact;
     }
     
-    updateHealthBar() {
-        if (!this.healthBar) return;
-        
-        this.healthBar.clear();
-        
-        // Background (black border)
-        this.healthBar.fillStyle(0x000000, 1);
-        this.healthBar.fillRect(this.x - 21, this.y - 31, 42, 8);
-        
-        // Health bar background (dark red)
-        this.healthBar.fillStyle(0x330000, 1);
-        this.healthBar.fillRect(this.x - 20, this.y - 30, 40, 6);
-        
-        // Health bar fill (bright red)
-        const healthPercent = this.health / this.maxHealth;
-        if (healthPercent > 0) {
-            this.healthBar.fillStyle(0xff0000, 1);
-            this.healthBar.fillRect(this.x - 20, this.y - 30, 40 * healthPercent, 6);
-        }
-    }
-    
-    updateManaBar() {
-        if (!this.manaBar) return;
-        
-        this.manaBar.clear();
-        
-        // Background (black border)
-        this.manaBar.fillStyle(0x000000, 1);
-        this.manaBar.fillRect(this.x - 21, this.y - 23, 42, 6);
-        
-        // Mana bar background (dark blue)
-        this.manaBar.fillStyle(0x000033, 1);
-        this.manaBar.fillRect(this.x - 20, this.y - 22, 40, 4);
-        
-        // Mana bar fill (bright blue)
-        const manaPercent = this.mana / this.maxMana;
-        if (manaPercent > 0) {
-            this.manaBar.fillStyle(0x0088ff, 1);
-            this.manaBar.fillRect(this.x - 20, this.y - 22, 40 * manaPercent, 4);
-        }
-    }
     
     update(targetPosition) {
         let newVelocityX = 0;
@@ -534,8 +564,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         // Update direction and animation based on movement
         this.updateDirectionAndAnimation(newVelocityX, newVelocityY);
         
-        this.updateHealthBar();
-        this.updateManaBar();
+        this.updatePotionEffects();
         
         this.mana = Math.min(this.maxMana, this.mana + 0.1);
     }
@@ -725,8 +754,6 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     }
     
     destroy() {
-        if (this.healthBar) this.healthBar.destroy();
-        if (this.manaBar) this.manaBar.destroy();
         super.destroy();
     }
 }

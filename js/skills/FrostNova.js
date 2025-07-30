@@ -20,6 +20,11 @@ class FrostNova extends Phaser.GameObjects.Sprite {
         
         const enemies = scene.enemies.getChildren();
         enemies.forEach(enemy => {
+            // Check if enemy is still valid before interacting with it
+            if (!enemy || !enemy.active || !enemy.scene) {
+                return;
+            }
+            
             const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
             if (distance <= radius) {
                 enemy.takeDamage(damage);

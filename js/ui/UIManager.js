@@ -15,8 +15,13 @@ class UIManager {
         this.tooltipText = null;
         
         // Hotbar elements
-        this.hotbarSlots = [];
+        this.potionHotbarSlots = [];
+        this.mouseHotbarSlots = [];
+        this.skillsHotbarSlots = [];
         
+        // Drag-and-drop support
+        this.draggedItem = null;
+        this.dragIcon = null;
         
         this.setupUI();
         this.setupControls();
@@ -24,7 +29,9 @@ class UIManager {
     
     setupUI() {
         this.createExperienceBar();
-        this.createExtendedHotbar();
+        this.createHealthManaGlobes();
+        this.createPotionHotbar();
+        this.createSkillsHotbar();
         this.createInfoPanels();
     }
     
@@ -44,12 +51,24 @@ class UIManager {
             this.toggleSkillTree();
         });
         
-        // Hotbar keys 1-6 for keyboard skills
-        for (let i = 1; i <= 6; i++) {
-            this.scene.input.keyboard.on(`keydown-DIGIT${i}`, () => {
-                this.useHotbarSlot(i - 1);
-            });
-        }
+        // Keys 1-4 for skills hotbar
+        const key1 = this.scene.input.keyboard.addKey('ONE');
+        const key2 = this.scene.input.keyboard.addKey('TWO');
+        const key3 = this.scene.input.keyboard.addKey('THREE');
+        const key4 = this.scene.input.keyboard.addKey('FOUR');
+        
+        key1.on('down', () => this.useSkillsHotbarSlot(0));
+        key2.on('down', () => this.useSkillsHotbarSlot(1));
+        key3.on('down', () => this.useSkillsHotbarSlot(2));
+        key4.on('down', () => this.useSkillsHotbarSlot(3));
+        
+        // Q and E for potion hotbar
+        this.scene.input.keyboard.on('keydown-Q', () => {
+            this.usePotionHotbarSlot(0);
+        });
+        this.scene.input.keyboard.on('keydown-E', () => {
+            this.usePotionHotbarSlot(1);
+        });
         
         // ESC to close all panels
         this.scene.input.keyboard.on('keydown-ESC', () => {
@@ -90,95 +109,243 @@ class UIManager {
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
     }
     
-    createExtendedHotbar() {
-        const hotbarY = this.scene.cameras.main.height - 60;
-        const centerX = this.scene.cameras.main.width / 2;
+    createHealthManaGlobes() {
+        const globeSize = 60;
+        const screenWidth = this.scene.cameras.main.width;
+        const screenHeight = this.scene.cameras.main.height;
+        
+        // Health globe (bottom left)
+        const healthGlobeX = 50;
+        const healthGlobeY = screenHeight - 80;
+        
+        // Mana globe (bottom right)  
+        const manaGlobeX = screenWidth - 50;
+        const manaGlobeY = screenHeight - 80;
+        
+        // Create health globe
+        this.healthGlobe = this.createGlobe(healthGlobeX, healthGlobeY, globeSize, 0xcc0000, 0xff4444);
+        
+        // Create mana globe
+        this.manaGlobe = this.createGlobe(manaGlobeX, manaGlobeY, globeSize, 0x0000cc, 0x4444ff);
+        
+        // Add text labels
+        this.healthText = this.scene.add.text(healthGlobeX, healthGlobeY + globeSize/2 + 15, '', {
+            fontSize: '10px',
+            fill: '#ffffff',
+            fontWeight: 'bold'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
+        
+        this.manaText = this.scene.add.text(manaGlobeX, manaGlobeY + globeSize/2 + 15, '', {
+            fontSize: '10px', 
+            fill: '#ffffff',
+            fontWeight: 'bold'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
+    }
+    
+    createGlobe(x, y, size, darkColor, lightColor) {
+        // Globe background (empty state)
+        const globeBg = this.scene.add.graphics();
+        globeBg.fillStyle(0x2a1810, 0.8);
+        globeBg.fillCircle(x, y, size/2);
+        globeBg.lineStyle(2, 0x8b4513, 1);
+        globeBg.strokeCircle(x, y, size/2);
+        globeBg.setScrollFactor(0).setDepth(1000);
+        
+        // Globe fill (will be clipped from bottom to top)
+        const globeFill = this.scene.add.graphics();
+        globeFill.setScrollFactor(0).setDepth(1001);
+        
+        // Globe highlight (glass effect)
+        const globeHighlight = this.scene.add.graphics();
+        globeHighlight.fillStyle(0xffffff, 0.3);
+        // Create a curved highlight on upper left
+        globeHighlight.fillEllipse(x - size/6, y - size/6, size/3, size/4);
+        globeHighlight.setScrollFactor(0).setDepth(1002);
+        
+        return {
+            background: globeBg,
+            fill: globeFill,
+            highlight: globeHighlight,
+            x: x,
+            y: y,
+            size: size,
+            darkColor: darkColor,
+            lightColor: lightColor
+        };
+    }
+    
+    createPotionHotbar() {
         const slotSize = 40;
-        const slotSpacing = 50;
-        const startX = centerX - (4 * slotSpacing);
+        const slotSpacing = 45;
+        const hotbarX = 150; // Moved right to avoid overlapping health orb
+        const hotbarY = this.scene.cameras.main.height - 100;
         
-        // Background for hotbar
-        this.hotbarBg = this.scene.add.graphics();
-        this.hotbarBg.fillStyle(0x2a1810, 0.9);
-        this.hotbarBg.fillRect(startX - 30, hotbarY - 30, 8 * slotSpacing + 20, 70);
-        this.hotbarBg.lineStyle(2, 0x8b4513, 1);
-        this.hotbarBg.strokeRect(startX - 30, hotbarY - 30, 8 * slotSpacing + 20, 70);
-        this.hotbarBg.setScrollFactor(0).setDepth(1000);
+        // Background for potion hotbar
+        const bgWidth = 2 * slotSpacing + 20;
+        this.potionHotbarBg = this.scene.add.graphics();
+        this.potionHotbarBg.fillStyle(0x2a1810, 0.9);
+        this.potionHotbarBg.fillRect(hotbarX - bgWidth/2, hotbarY - 35, bgWidth, 70);
+        this.potionHotbarBg.lineStyle(2, 0x8b4513, 1);
+        this.potionHotbarBg.strokeRect(hotbarX - bgWidth/2, hotbarY - 35, bgWidth, 70);
+        this.potionHotbarBg.setScrollFactor(0).setDepth(1000);
         
-        // Slot labels (keys 1-6, then LMB, RMB)
-        const slotLabels = ['1', '2', '3', '4', '5', '6', 'LMB', 'RMB'];
+        // Create 2 potion slots
+        const potionLabels = ['Q', 'E'];
+        for (let i = 0; i < 2; i++) {
+            const slotX = hotbarX - slotSpacing/2 + (i * slotSpacing);
+            
+            const slot = this.createHotbarSlot(slotX, hotbarY, slotSize, potionLabels[i], 'potion', i);
+            this.potionHotbarSlots.push(slot);
+        }
+    }
+    
+    createSkillsHotbar() {
+        const slotSize = 40;
+        const mouseSlotSize = 45;
+        const slotSpacing = 45;
+        const hotbarX = this.scene.cameras.main.width - 200;
+        const mouseHotbarY = this.scene.cameras.main.height - 130;
+        const skillsHotbarY = this.scene.cameras.main.height - 70;
         
-        // Create hotbar slots
-        for (let i = 0; i < 8; i++) {
-            const slotX = startX + (i * slotSpacing);
+        // Background for mouse hotbar
+        const mouseBgWidth = 3 * slotSpacing + 30;
+        this.mouseHotbarBg = this.scene.add.graphics();
+        this.mouseHotbarBg.fillStyle(0x2a1810, 0.9);
+        this.mouseHotbarBg.fillRect(hotbarX - mouseBgWidth/2, mouseHotbarY - 30, mouseBgWidth, 60);
+        this.mouseHotbarBg.lineStyle(2, 0x8b4513, 1);
+        this.mouseHotbarBg.strokeRect(hotbarX - mouseBgWidth/2, mouseHotbarY - 30, mouseBgWidth, 60);
+        this.mouseHotbarBg.setScrollFactor(0).setDepth(1000);
+        
+        // Create 3 mouse button slots
+        const mouseLabels = ['LMB', 'MMB', 'RMB'];
+        for (let i = 0; i < 3; i++) {
+            const slotX = hotbarX - slotSpacing + (i * slotSpacing);
             
-            // Different styling for mouse button slots
-            const isMouseSlot = i >= 6;
-            const slotColor = isMouseSlot ? 0x2a2a2a : 0x1a1a1a;
-            const borderColor = isMouseSlot ? 0xa0522d : 0x8b4513;
-            
-            // Slot background
-            const slot = this.scene.add.graphics();
-            slot.fillStyle(slotColor, 1);
-            slot.fillRect(slotX - slotSize/2, hotbarY - slotSize/2, slotSize, slotSize);
-            slot.lineStyle(2, borderColor, 1);
-            slot.strokeRect(slotX - slotSize/2, hotbarY - slotSize/2, slotSize, slotSize);
-            slot.setScrollFactor(0).setDepth(1001);
-            
-            // Slot label
-            const labelText = this.scene.add.text(slotX, hotbarY + 25, slotLabels[i], {
-                fontSize: '10px',
-                fill: isMouseSlot ? '#ffff88' : '#cccccc',
-                fontWeight: 'bold'
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
-            
-            // Icon placeholder
-            const icon = this.scene.add.graphics();
-            icon.setScrollFactor(0).setDepth(1002);
-            icon.x = slotX;
-            icon.y = hotbarY;
-            
-            // Make slots interactive for tooltips and right-click removal
-            slot.setInteractive(new Phaser.Geom.Rectangle(slotX - slotSize/2, hotbarY - slotSize/2, slotSize, slotSize), Phaser.Geom.Rectangle.Contains);
-            
-            // Add hover events for tooltips
-            slot.on('pointerover', () => {
-                this.showTooltip(i, slotX, hotbarY - 60);
-            });
-            slot.on('pointerout', () => {
-                this.hideTooltip();
-            });
-            
-            // Add right-click to remove (except for move skill)
-            slot.on('pointerdown', (pointer, localX, localY, event) => {
-                if (pointer.rightButtonDown()) {
-                    const hotbarItem = this.player.hotbar[i];
-                    if (hotbarItem && hotbarItem.type !== 'action') { // Don't remove move skill
-                        const itemName = hotbarItem.type === 'skill' ? 
-                            this.capitalizeFirst(hotbarItem.name) : 
-                            hotbarItem.item ? hotbarItem.item.name : 'Item';
-                        
-                        this.player.hotbar[i] = null;
-                        this.updateHotbar();
-                        this.showFeedbackMessage(`${itemName} removed`, slotX, hotbarY - 40, '#ff8800');
-                        event.stopPropagation();
-                    }
-                }
-            });
-            
-            this.hotbarSlots.push({
-                slot: slot,
-                icon: icon,
-                label: labelText,
-                x: slotX,
-                y: hotbarY,
-                cooldownOverlay: null,
-                isMouseSlot: isMouseSlot,
-                slotIndex: i
-            });
+            const slot = this.createHotbarSlot(slotX, mouseHotbarY, mouseSlotSize, mouseLabels[i], 'mouse', i);
+            this.mouseHotbarSlots.push(slot);
         }
         
-        this.updateHotbar();
+        // Background for skills hotbar
+        const skillsBgWidth = 4 * slotSpacing + 20;
+        this.skillsHotbarBg = this.scene.add.graphics();
+        this.skillsHotbarBg.fillStyle(0x2a1810, 0.9);
+        this.skillsHotbarBg.fillRect(hotbarX - skillsBgWidth/2, skillsHotbarY - 25, skillsBgWidth, 50);
+        this.skillsHotbarBg.lineStyle(2, 0x8b4513, 1);
+        this.skillsHotbarBg.strokeRect(hotbarX - skillsBgWidth/2, skillsHotbarY - 25, skillsBgWidth, 50);
+        this.skillsHotbarBg.setScrollFactor(0).setDepth(1000);
+        
+        // Create 4 skill slots
+        const skillLabels = ['1', '2', '3', '4'];
+        for (let i = 0; i < 4; i++) {
+            const slotX = hotbarX - (1.5 * slotSpacing) + (i * slotSpacing);
+            
+            const slot = this.createHotbarSlot(slotX, skillsHotbarY, slotSize, skillLabels[i], 'skill', i);
+            this.skillsHotbarSlots.push(slot);
+        }
+        
+        this.updateAllHotbars();
+    }
+    
+    createHotbarSlot(x, y, size, label, slotType, index) {
+        // Slot background
+        const slot = this.scene.add.graphics();
+        const slotColor = slotType === 'mouse' ? 0x2a2a2a : 0x1a1a1a;
+        const borderColor = slotType === 'mouse' ? 0xa0522d : 0x8b4513;
+        
+        slot.fillStyle(slotColor, 1);
+        slot.fillRect(x - size/2, y - size/2, size, size);
+        slot.lineStyle(2, borderColor, 1);
+        slot.strokeRect(x - size/2, y - size/2, size, size);
+        slot.setScrollFactor(0).setDepth(1001);
+        
+        // Slot label
+        const labelText = this.scene.add.text(x, y + size/2 + 5, label, {
+            fontSize: '10px',
+            fill: slotType === 'mouse' ? '#ffff88' : '#cccccc',
+            fontWeight: 'bold'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
+        
+        // Icon placeholder
+        const icon = this.scene.add.graphics();
+        icon.setScrollFactor(0).setDepth(1002);
+        icon.x = x;
+        icon.y = y;
+        
+        // Make slot interactive
+        slot.setInteractive(new Phaser.Geom.Rectangle(x - size/2, y - size/2, size, size), Phaser.Geom.Rectangle.Contains);
+        
+        // Enable as drop zone
+        const dropZone = this.scene.add.zone(x, y, size, size).setRectangleDropZone(size, size);
+        dropZone.setScrollFactor(0).setDepth(1000);
+        
+        const slotData = {
+            slot: slot,
+            icon: icon,
+            label: labelText,
+            x: x,
+            y: y,
+            size: size,
+            cooldownOverlay: null,
+            slotType: slotType,
+            slotIndex: index,
+            dropZone: dropZone
+        };
+        
+        // Setup interactions
+        this.setupSlotInteractions(slotData);
+        
+        return slotData;
+    }
+    
+    setupSlotInteractions(slotData) {
+        const { slot, x, y, slotType, slotIndex } = slotData;
+        
+        // Hover events for tooltips
+        slot.on('pointerover', () => {
+            this.showHotbarTooltip(slotType, slotIndex, x, y - 60);
+        });
+        slot.on('pointerout', () => {
+            this.hideTooltip();
+        });
+        
+        // Right-click to remove
+        slot.on('pointerdown', (pointer, localX, localY, event) => {
+            if (pointer.rightButtonDown()) {
+                this.removeFromHotbar(slotType, slotIndex);
+                event.stopPropagation();
+            }
+        });
+        
+        // Drop events
+        this.scene.input.on('drop', (pointer, gameObject, dropZone) => {
+            if (dropZone === slotData.dropZone && this.draggedItem) {
+                this.handleDrop(slotType, slotIndex);
+            }
+        });
+        
+        // Visual feedback for drag over
+        this.scene.input.on('dragenter', (pointer, gameObject, dropZone) => {
+            if (dropZone === slotData.dropZone) {
+                slot.clear();
+                slot.fillStyle(0x3a3a3a, 1);
+                slot.fillRect(x - slotData.size/2, y - slotData.size/2, slotData.size, slotData.size);
+                slot.lineStyle(3, 0x00ff00, 1);
+                slot.strokeRect(x - slotData.size/2, y - slotData.size/2, slotData.size, slotData.size);
+            }
+        });
+        
+        this.scene.input.on('dragleave', (pointer, gameObject, dropZone) => {
+            if (dropZone === slotData.dropZone) {
+                // Restore original appearance
+                const slotColor = slotType === 'mouse' ? 0x2a2a2a : 0x1a1a1a;
+                const borderColor = slotType === 'mouse' ? 0xa0522d : 0x8b4513;
+                slot.clear();
+                slot.fillStyle(slotColor, 1);
+                slot.fillRect(x - slotData.size/2, y - slotData.size/2, slotData.size, slotData.size);
+                slot.lineStyle(2, borderColor, 1);
+                slot.strokeRect(x - slotData.size/2, y - slotData.size/2, slotData.size, slotData.size);
+            }
+        });
     }
     
     createInfoPanels() {
@@ -192,7 +359,7 @@ class UIManager {
         
         // Controls info panel (top-left, below character info)
         this.controlsInfo = this.scene.add.text(20, 150, 
-            'I - Inventory\nC - Character\nS - Skills\n1-6 - Hotbar\nLMB/RMB - Mouse Skills', {
+            'I - Inventory\nC - Character\nS - Skills\n1-4 - Skills\nQ/E - Potions\nLMB/MMB/RMB - Mouse Actions', {
             fontSize: '10px',
             fill: '#cccccc',
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -202,8 +369,9 @@ class UIManager {
     
     updateUI() {
         this.updateExperienceBar();
+        this.updateHealthManaGlobes();
         this.updateCharacterInfo();
-        this.updateHotbar();
+        this.updateAllHotbars();
     }
     
     updateExperienceBar() {
@@ -222,11 +390,64 @@ class UIManager {
         this.levelText.setText(`Level ${this.player.level}`);
     }
     
+    updateHealthManaGlobes() {
+        // Update health globe
+        if (this.healthGlobe) {
+            this.updateGlobe(this.healthGlobe, this.player.health, this.player.maxHealth);
+            this.healthText.setText(`${Math.floor(this.player.health)}/${this.player.maxHealth}`);
+        }
+        
+        // Update mana globe
+        if (this.manaGlobe) {
+            this.updateGlobe(this.manaGlobe, this.player.mana, this.player.maxMana);
+            this.manaText.setText(`${Math.floor(this.player.mana)}/${this.player.maxMana}`);
+        }
+    }
+    
+    updateGlobe(globe, current, max) {
+        const percentage = Math.max(0, Math.min(1, current / max));
+        
+        // Clear the fill
+        globe.fill.clear();
+        
+        if (percentage > 0) {
+            const radius = globe.size / 2;
+            
+            // Calculate the fill height (from bottom)
+            const fillHeight = (globe.size - 4) * percentage; // -4 for border
+            const fillBottom = globe.y + radius - 2; // Bottom of the globe
+            const fillTop = fillBottom - fillHeight;
+            
+            // Create a circular fill that grows from bottom to top
+            // We'll approximate this by drawing horizontal slices
+            const slices = Math.ceil(fillHeight);
+            
+            for (let i = 0; i < slices; i++) {
+                const sliceY = fillBottom - i;
+                if (sliceY < fillTop) break;
+                
+                // Calculate the width of the circle at this Y position
+                const distanceFromCenter = Math.abs(sliceY - globe.y);
+                if (distanceFromCenter >= radius - 2) continue;
+                
+                const halfWidth = Math.sqrt(Math.pow(radius - 2, 2) - Math.pow(distanceFromCenter, 2));
+                
+                // Color gradient - darker at bottom, lighter at top
+                const gradientFactor = 1 - (i / fillHeight);
+                const r = Math.floor(((globe.darkColor >> 16) & 0xFF) + gradientFactor * (((globe.lightColor >> 16) & 0xFF) - ((globe.darkColor >> 16) & 0xFF)));
+                const g = Math.floor(((globe.darkColor >> 8) & 0xFF) + gradientFactor * (((globe.lightColor >> 8) & 0xFF) - ((globe.darkColor >> 8) & 0xFF)));
+                const b = Math.floor((globe.darkColor & 0xFF) + gradientFactor * ((globe.lightColor & 0xFF) - (globe.darkColor & 0xFF)));
+                const color = (r << 16) | (g << 8) | b;
+                
+                globe.fill.fillStyle(color, 1);
+                globe.fill.fillRect(globe.x - halfWidth, sliceY, halfWidth * 2, 1);
+            }
+        }
+    }
+    
     updateCharacterInfo() {
         const info = [
             `Level: ${this.player.level}`,
-            `Health: ${Math.floor(this.player.health)}/${this.player.maxHealth}`,
-            `Mana: ${Math.floor(this.player.mana)}/${this.player.maxMana}`,
             `Stat Points: ${this.player.statPoints}`,
             `Skill Points: ${this.player.skillPoints}`
         ];
@@ -234,10 +455,92 @@ class UIManager {
         this.characterInfo.setText(info.join('\n'));
     }
     
-    updateHotbar() {
-        for (let i = 0; i < this.hotbarSlots.length; i++) {
-            const slot = this.hotbarSlots[i];
-            const hotbarItem = this.player.hotbar[i];
+    updateAllHotbars() {
+        this.updatePotionHotbar();
+        this.updateMouseHotbar();
+        this.updateSkillsHotbar();
+    }
+    
+    updatePotionHotbar() {
+        for (let i = 0; i < this.potionHotbarSlots.length; i++) {
+            const slot = this.potionHotbarSlots[i];
+            const hotbarItem = this.player.potionHotbar ? this.player.potionHotbar[i] : null;
+            
+            slot.icon.clear();
+            
+            if (hotbarItem && hotbarItem.type === 'item') {
+                this.drawItemIcon(slot.icon, hotbarItem.item);
+                
+                // Add stack size indicator if item is stackable and > 1
+                if (hotbarItem.item.stackable && hotbarItem.item.stackSize > 1) {
+                    if (!slot.stackText) {
+                        slot.stackText = this.scene.add.text(
+                            slot.x + slot.size/2 - 2,
+                            slot.y + slot.size/2 - 2,
+                            '',
+                            {
+                                fontSize: '10px',
+                                fill: '#ffffff',
+                                fontWeight: 'bold',
+                                stroke: '#000000',
+                                strokeThickness: 2
+                            }
+                        ).setOrigin(1, 1).setScrollFactor(0).setDepth(1005);
+                    }
+                    slot.stackText.setText(hotbarItem.item.stackSize.toString());
+                    slot.stackText.setVisible(true);
+                } else if (slot.stackText) {
+                    slot.stackText.setVisible(false);
+                }
+                
+                // Update potion cooldown overlay
+                this.updatePotionCooldown(slot, i);
+            } else if (slot.stackText) {
+                slot.stackText.setVisible(false);
+            }
+        }
+    }
+    
+    updatePotionCooldown(slot, slotIndex) {
+        const hotbarItem = this.player.potionHotbar ? this.player.potionHotbar[slotIndex] : null;
+        if (!hotbarItem || !hotbarItem.item) return;
+        
+        let cooldownRemaining = 0;
+        let cooldownDuration = 0;
+        
+        // Determine which cooldown to check based on potion type
+        if (hotbarItem.item.name.includes('Healing')) {
+            cooldownRemaining = this.player.getHealthPotionCooldownRemaining();
+            cooldownDuration = this.player.healthPotionCooldown;
+        } else if (hotbarItem.item.name.includes('Mana')) {
+            cooldownRemaining = this.player.getManaPotionCooldownRemaining();
+            cooldownDuration = this.player.manaPotionCooldown;
+        }
+        
+        const cooldownPercent = cooldownDuration > 0 ? cooldownRemaining / cooldownDuration : 0;
+        
+        if (!slot.cooldownOverlay) {
+            slot.cooldownOverlay = this.scene.add.graphics();
+            slot.cooldownOverlay.setScrollFactor(0).setDepth(1004);
+        }
+        
+        slot.cooldownOverlay.clear();
+        if (cooldownPercent > 0) {
+            slot.cooldownOverlay.fillStyle(0x000000, 0.7);
+            const overlaySize = slot.size || 40;
+            slot.cooldownOverlay.fillRect(
+                slot.x - overlaySize/2, 
+                slot.y - overlaySize/2 + (overlaySize * (1 - cooldownPercent)), 
+                overlaySize, 
+                overlaySize * cooldownPercent
+            );
+        }
+    }
+    
+    updateMouseHotbar() {
+        for (let i = 0; i < this.mouseHotbarSlots.length; i++) {
+            const slot = this.mouseHotbarSlots[i];
+            const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[i] : null;
             
             slot.icon.clear();
             
@@ -245,21 +548,32 @@ class UIManager {
                 if (hotbarItem.type === 'skill') {
                     const skill = this.player.skills[hotbarItem.name];
                     if (skill && skill.level > 0) {
-                        // Draw skill icon based on skill type
                         this.drawSkillIcon(slot.icon, hotbarItem.name);
-                        
-                        // Update cooldown overlay
-                        this.updateSkillCooldown(i, hotbarItem.name);
+                        this.updateSkillCooldown(slot, hotbarItem.name);
                     } else {
-                        // Draw grayed out icon for unlearned skills
                         this.drawSkillIcon(slot.icon, hotbarItem.name, true);
                     }
-                } else if (hotbarItem.type === 'item') {
-                    // Draw item icon based on item type
-                    this.drawItemIcon(slot.icon, hotbarItem.item);
                 } else if (hotbarItem.type === 'action') {
-                    // Draw action icon
                     this.drawActionIcon(slot.icon, hotbarItem.name);
+                }
+            }
+        }
+    }
+    
+    updateSkillsHotbar() {
+        for (let i = 0; i < this.skillsHotbarSlots.length; i++) {
+            const slot = this.skillsHotbarSlots[i];
+            const hotbarItem = this.player.skillsHotbar ? this.player.skillsHotbar[i] : null;
+            
+            slot.icon.clear();
+            
+            if (hotbarItem && hotbarItem.type === 'skill') {
+                const skill = this.player.skills[hotbarItem.name];
+                if (skill && skill.level > 0) {
+                    this.drawSkillIcon(slot.icon, hotbarItem.name);
+                    this.updateSkillCooldown(slot, hotbarItem.name);
+                } else {
+                    this.drawSkillIcon(slot.icon, hotbarItem.name, true);
                 }
             }
         }
@@ -278,20 +592,26 @@ class UIManager {
         
         switch (item.type) {
             case 'potion':
-                if (item.name === 'Health Potion') {
-                    // Red bottle shape
-                    graphics.fillStyle(0xcc0000, 1);
+                if (item.name.includes('Healing')) {
+                    // Red bottle shape - color varies by tier
+                    const baseRed = item.potionTier > 4 ? 0xff0000 : 0xcc0000;
+                    const lightRed = item.potionTier > 4 ? 0xff6666 : 0xff4444;
+                    
+                    graphics.fillStyle(baseRed, 1);
                     graphics.fillRoundedRect(-8, -10, 16, 20, 3);
-                    graphics.fillStyle(0xff4444, 1);
+                    graphics.fillStyle(lightRed, 1);
                     graphics.fillRoundedRect(-6, -8, 12, 16, 2);
                     // Cork/cap
                     graphics.fillStyle(0x8b4513, 1);
                     graphics.fillRect(-4, -12, 8, 4);
-                } else if (item.name === 'Mana Potion') {
-                    // Blue bottle shape
-                    graphics.fillStyle(0x0000cc, 1);
+                } else if (item.name.includes('Mana')) {
+                    // Blue bottle shape - color varies by tier
+                    const baseBlue = item.potionTier > 4 ? 0x0000ff : 0x0000cc;
+                    const lightBlue = item.potionTier > 4 ? 0x6666ff : 0x4444ff;
+                    
+                    graphics.fillStyle(baseBlue, 1);
                     graphics.fillRoundedRect(-8, -10, 16, 20, 3);
-                    graphics.fillStyle(0x4444ff, 1);
+                    graphics.fillStyle(lightBlue, 1);
                     graphics.fillRoundedRect(-6, -8, 12, 16, 2);
                     // Cork/cap
                     graphics.fillStyle(0x8b4513, 1);
@@ -501,8 +821,7 @@ class UIManager {
         }
     }
     
-    updateSkillCooldown(slotIndex, skillName) {
-        const slot = this.hotbarSlots[slotIndex];
+    updateSkillCooldown(slot, skillName) {
         const skill = this.player.skills[skillName];
         const currentTime = this.scene.time.now;
         
@@ -517,20 +836,110 @@ class UIManager {
         slot.cooldownOverlay.clear();
         if (cooldownPercent > 0) {
             slot.cooldownOverlay.fillStyle(0x000000, 0.7);
+            const overlaySize = slot.size || 40;
             slot.cooldownOverlay.fillRect(
-                slot.x - 20, 
-                slot.y - 20 + (40 * (1 - cooldownPercent)), 
-                40, 
-                40 * cooldownPercent
+                slot.x - overlaySize/2, 
+                slot.y - overlaySize/2 + (overlaySize * (1 - cooldownPercent)), 
+                overlaySize, 
+                overlaySize * cooldownPercent
             );
         }
     }
     
-    useHotbarSlot(index) {
-        const hotbarItem = this.player.hotbar[index];
+    usePotionHotbarSlot(index) {
+        const hotbarItem = this.player.potionHotbar ? this.player.potionHotbar[index] : null;
+        if (!hotbarItem || hotbarItem.type !== 'item') return;
+        
+        // Check specific potion cooldown
+        const isHealthPotion = hotbarItem.item.name.includes('Healing');
+        const isManaPotion = hotbarItem.item.name.includes('Mana');
+        
+        let canUse = false;
+        let remainingCooldown = 0;
+        
+        if (isHealthPotion) {
+            canUse = this.player.canUseHealthPotion();
+            remainingCooldown = this.player.getHealthPotionCooldownRemaining();
+        } else if (isManaPotion) {
+            canUse = this.player.canUseManaPotion();
+            remainingCooldown = this.player.getManaPotionCooldownRemaining();
+        }
+        
+        if (!canUse) {
+            const remainingSeconds = Math.ceil(remainingCooldown / 1000);
+            const potionType = isHealthPotion ? 'Health' : 'Mana';
+            this.showFeedbackMessage(`${potionType} potion cooldown: ${remainingSeconds}s`, 
+                this.potionHotbarSlots[index].x, 
+                this.potionHotbarSlots[index].y - 40, 
+                '#ff8800');
+            return;
+        }
+        
+        // Try to use the potion (this checks cooldowns and applies effects)
+        const success = hotbarItem.item.use(this.player);
+        if (success) {
+            // Decrement stack size only on successful use
+            hotbarItem.item.stackSize--;
+            
+            // Show healing/mana restore feedback
+            const potionType = hotbarItem.item.name.includes('Healing') ? 'health' : 'mana';
+            const amount = potionType === 'health' ? hotbarItem.item.healAmount : hotbarItem.item.manaAmount;
+            const color = potionType === 'health' ? '#ff4444' : '#4444ff';
+            
+            this.showFeedbackMessage(`+${amount} ${potionType} over time`, 
+                this.potionHotbarSlots[index].x, 
+                this.potionHotbarSlots[index].y - 40, 
+                color);
+            
+            // Remove empty potion from hotbar or update stack display
+            if (hotbarItem.item.stackSize <= 0) {
+                this.player.potionHotbar[index] = null;
+            }
+            this.updatePotionHotbar(); // Always update to show new stack size
+        }
+    }
+    
+    useSkillsHotbarSlot(index) {
+        const hotbarItem = this.player.skillsHotbar ? this.player.skillsHotbar[index] : null;
+        if (!hotbarItem || hotbarItem.type !== 'skill') return;
+        
+        const skill = this.player.skills[hotbarItem.name];
+        
+        // Check if skill is learned
+        if (!skill || skill.level === 0) {
+            this.showSkillNotLearnedMessage(hotbarItem.name);
+            return;
+        }
+        
+        // Get mouse position for targeted skills
+        const pointer = this.scene.input.activePointer;
+        const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        
+        // Handle different skill types
+        if (hotbarItem.name === 'frostNova') {
+            this.player.castFrostNova();
+        } else if (hotbarItem.name === 'teleport') {
+            this.player.castTeleport(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'fireball') {
+            this.player.castFireball(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'chainLightning') {
+            this.player.castChainLightning(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'iceBolt') {
+            this.player.castIceBolt(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'meteor') {
+            this.player.castMeteor(worldPoint.x, worldPoint.y);
+        }
+    }
+    
+    useMouseHotbarSlot(index, worldPoint) {
+        const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[index] : null;
         if (!hotbarItem) return;
         
-        if (hotbarItem.type === 'skill') {
+        if (hotbarItem.type === 'action' && hotbarItem.name === 'move') {
+            // Handle movement
+            this.scene.playerTarget = worldPoint;
+            this.scene.createMoveMarker(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.type === 'skill') {
             const skill = this.player.skills[hotbarItem.name];
             
             // Check if skill is learned
@@ -543,19 +952,16 @@ class UIManager {
             if (hotbarItem.name === 'frostNova') {
                 this.player.castFrostNova();
             } else if (hotbarItem.name === 'teleport') {
-                // Teleport to mouse position
-                const pointer = this.scene.input.activePointer;
-                const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
                 this.player.castTeleport(worldPoint.x, worldPoint.y);
             } else if (hotbarItem.name === 'fireball') {
-                // Fireball needs targeting - cast toward mouse position
-                const pointer = this.scene.input.activePointer;
-                const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
                 this.player.castFireball(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'chainLightning') {
+                this.player.castChainLightning(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'iceBolt') {
+                this.player.castIceBolt(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'meteor') {
+                this.player.castMeteor(worldPoint.x, worldPoint.y);
             }
-        } else if (hotbarItem.type === 'item') {
-            // Use consumable item
-            const success = this.useItem(hotbarItem.item);
         }
     }
     
@@ -610,8 +1016,8 @@ class UIManager {
     }
     
     createInventoryPanel() {
-        const panelWidth = 600;  // Wider to fit equipment + inventory
-        const panelHeight = 400; // Taller for better layout
+        const panelWidth = 580;  // Adjusted width for better fit
+        const panelHeight = 450; // Taller to accommodate 7 rows
         const panelX = (this.scene.cameras.main.width - panelWidth) / 2;
         const panelY = (this.scene.cameras.main.height - panelHeight) / 2;
         
@@ -643,7 +1049,7 @@ class UIManager {
         }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
         
         // Inventory section label - centered over the grid
-        const invLabel = this.scene.add.text(panelX + 470, panelY + 35, 'ITEMS', {
+        const invLabel = this.scene.add.text(panelX + 410, panelY + 35, 'ITEMS', {
             fontSize: '14px',
             fill: '#ffaa00',
             fontWeight: 'bold'
@@ -655,7 +1061,7 @@ class UIManager {
         this.createEquipmentSlots(panelX + 20, panelY + 65);
         
         // Create inventory grid (right side) - centered in available space
-        this.createInventoryGrid(panelX + 335, panelY + 80);
+        this.createInventoryGrid(panelX + 320, panelY + 75);
     }
     
     createEquipmentSlots(startX, startY) {
@@ -693,6 +1099,18 @@ class UIManager {
                 fontWeight: 'bold'
             }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
             
+            // Create drop zone for equipment slot
+            const dropZone = this.scene.add.zone(equipSlot.x, equipSlot.y, slotSize, slotSize)
+                .setRectangleDropZone(slotSize, slotSize)
+                .setScrollFactor(0).setDepth(2000);
+            
+            // Store equipment slot info for highlighting and drop handling
+            equipSlot.graphics = slot;
+            equipSlot.dropZone = dropZone;
+            
+            // Setup drop interactions
+            this.setupEquipmentSlotInteractions(equipSlot, slot, dropZone, slotSize);
+            
             // Check if item is equipped in this slot
             const equippedItem = this.player.equipment[equipSlot.slot];
             if (equippedItem) {
@@ -703,23 +1121,35 @@ class UIManager {
                 this.drawItemIcon(itemIcon, equippedItem);
                 this.inventoryElements.push(itemIcon);
                 
-                // Add tooltip and unequip functionality
-                slot.setInteractive(new Phaser.Geom.Rectangle(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize), Phaser.Geom.Rectangle.Contains);
-                slot.on('pointerover', () => {
-                    this.showInventoryItemTooltip(equippedItem, equipSlot.x, equipSlot.y - 30);
-                });
-                slot.on('pointerout', () => {
-                    this.hideTooltip();
-                });
-                slot.on('pointerdown', (pointer, localX, localY, event) => {
-                    if (pointer.rightButtonDown()) {
-                        this.unequipItem(equipSlot.slot);
-                        event.stopPropagation();
+                // Add tooltip and drag functionality for equipped items
+                const equippedContainer = this.scene.add.container(equipSlot.x, equipSlot.y);
+                equippedContainer.setSize(slotSize, slotSize);
+                equippedContainer.setInteractive({ draggable: true });
+                equippedContainer.setScrollFactor(0).setDepth(2003);
+                equippedContainer.itemData = {
+                    type: 'item',
+                    item: equippedItem,
+                    display: equippedItem.name,
+                    equipmentSlot: equipSlot.slot
+                };
+                
+                // Drag events for equipped items
+                this.setupEquippedItemDrag(equippedContainer, equippedItem);
+                
+                // Tooltip events
+                equippedContainer.on('pointerover', () => {
+                    if (!this.draggedItem) {
+                        this.showInventoryItemTooltip(equippedItem, equipSlot.x, equipSlot.y - 30);
                     }
                 });
+                equippedContainer.on('pointerout', () => {
+                    this.hideTooltip();
+                });
+                
+                this.inventoryElements.push(equippedContainer);
             }
             
-            this.inventoryElements.push(slot, label);
+            this.inventoryElements.push(slot, label, dropZone);
         });
         
         // No character representation needed - equipment slots are self-explanatory
@@ -733,64 +1163,177 @@ class UIManager {
     }
 
     createInventoryGrid(startX, startY) {
-        const slotSize = 32;    // Larger slots for better visibility
-        const spacing = 34;     // Better spacing that fills available width nicely
+        const slotSize = 28;    // Slightly smaller slots to fit better
+        const spacing = 32;     // Add proper padding between slots
+        const padding = 2;      // Padding inside each slot
         
         for (let row = 0; row < this.player.inventory.height; row++) {
             for (let col = 0; col < this.player.inventory.width; col++) {
-                const slotX = startX + (col * spacing);
-                const slotY = startY + (row * spacing);
+                const slotX = startX + (col * spacing) + padding;
+                const slotY = startY + (row * spacing) + padding;
                 const slotIndex = row * this.player.inventory.width + col;
                 
                 const slot = this.scene.add.graphics();
                 slot.fillStyle(0x1a1a1a, 1);
-                slot.fillRect(slotX, slotY, slotSize, slotSize);
+                slot.fillRect(slotX, slotY, slotSize - padding, slotSize - padding);
                 slot.lineStyle(1, 0x666666, 1);
-                slot.strokeRect(slotX, slotY, slotSize, slotSize);
+                slot.strokeRect(slotX, slotY, slotSize - padding, slotSize - padding);
                 slot.setScrollFactor(0).setDepth(2001);
+                
+                // Create drop zone for this inventory slot
+                const dropZone = this.scene.add.zone(
+                    slotX + (slotSize - padding)/2, 
+                    slotY + (slotSize - padding)/2, 
+                    slotSize - padding, 
+                    slotSize - padding
+                ).setRectangleDropZone(slotSize - padding, slotSize - padding)
+                .setScrollFactor(0).setDepth(2000);
+                
+                // Setup drop interactions for inventory slot
+                this.setupInventorySlotInteractions(dropZone, slot, slotIndex, slotX, slotY, slotSize, padding);
                 
                 // Add item representation if slot contains item
                 const item = this.player.inventory.items[slotIndex];
                 if (item) {
                     // Create item icon using the new icon system
                     const itemIcon = this.scene.add.graphics();
-                    itemIcon.x = slotX + slotSize/2;
-                    itemIcon.y = slotY + slotSize/2;
+                    itemIcon.x = slotX + (slotSize - padding)/2;
+                    itemIcon.y = slotY + (slotSize - padding)/2;
                     itemIcon.setScrollFactor(0).setDepth(2002);
                     this.drawItemIcon(itemIcon, item);
                     this.inventoryElements.push(itemIcon);
                     
+                    // Add stack size indicator if stackable and > 1
+                    if (item.stackable && item.stackSize > 1) {
+                        const stackText = this.scene.add.text(
+                            slotX + (slotSize - padding) - 2,
+                            slotY + (slotSize - padding) - 2,
+                            item.stackSize.toString(),
+                            {
+                                fontSize: '10px',
+                                fill: '#ffffff',
+                                fontWeight: 'bold',
+                                stroke: '#000000',
+                                strokeThickness: 2
+                            }
+                        ).setOrigin(1, 1).setScrollFactor(0).setDepth(2003);
+                        this.inventoryElements.push(stackText);
+                    }
+                    
                     // Add hover tooltip and click interactions for inventory items
-                    slot.setInteractive(new Phaser.Geom.Rectangle(slotX, slotY, slotSize, slotSize), Phaser.Geom.Rectangle.Contains);
+                    slot.setInteractive(new Phaser.Geom.Rectangle(slotX, slotY, slotSize - padding, slotSize - padding), Phaser.Geom.Rectangle.Contains);
                     slot.on('pointerover', () => {
-                        this.showInventoryItemTooltip(item, slotX + slotSize/2, slotY - 10);
+                        this.showInventoryItemTooltip(item, slotX + (slotSize - padding)/2, slotY - 10);
                     });
                     slot.on('pointerout', () => {
                         this.hideTooltip();
                     });
                     
-                    // Right-click to use/equip item or add to hotbar
-                    slot.on('pointerdown', (pointer, localX, localY, event) => {
-                        if (pointer.rightButtonDown()) {
-                            if (item.type === 'potion') {
-                                // Use potion directly or add to first empty hotbar slot
-                                this.addItemToHotbar(item);
-                            } else if (item.equipSlot) {
-                                // Equip item
-                                this.equipItem(item, slotIndex);
-                            }
-                            event.stopPropagation();
+                    // Make all items draggable
+                    const itemContainer = this.scene.add.container(slotX + (slotSize - padding)/2, slotY + (slotSize - padding)/2);
+                    itemContainer.setSize(slotSize - padding, slotSize - padding);
+                    itemContainer.setInteractive({ draggable: true });
+                    itemContainer.setScrollFactor(0).setDepth(2003);
+                    itemContainer.itemData = { 
+                        type: 'item', 
+                        item: item, 
+                        display: item.name, 
+                        inventorySlot: slotIndex
+                    };
+                    
+                    // Drag events
+                    itemContainer.on('dragstart', (pointer) => {
+                        this.draggedItem = itemContainer.itemData;
+                        itemContainer.setAlpha(0.5);
+                        
+                        // Create drag icon
+                        this.dragIcon = this.scene.add.graphics();
+                        this.dragIcon.setScrollFactor(0).setDepth(5000);
+                        this.drawItemIcon(this.dragIcon, item);
+                        
+                        // Highlight compatible equipment slots
+                        this.highlightCompatibleSlots(item);
+                    });
+                    
+                    itemContainer.on('drag', (pointer, dragX, dragY) => {
+                        if (this.dragIcon) {
+                            this.dragIcon.x = pointer.x;
+                            this.dragIcon.y = pointer.y;
                         }
                     });
+                    
+                    itemContainer.on('dragend', (pointer) => {
+                        itemContainer.setAlpha(1);
+                        if (this.dragIcon) {
+                            this.dragIcon.destroy();
+                            this.dragIcon = null;
+                        }
+                        this.draggedItem = null;
+                        
+                        // Remove slot highlighting
+                        this.clearSlotHighlighting();
+                    });
+                    
+                    // Add tooltip events to the draggable container since it's on top
+                    itemContainer.on('pointerover', () => {
+                        if (!this.draggedItem) {
+                            this.showInventoryItemTooltip(item, slotX + (slotSize - padding)/2, slotY - 10);
+                        }
+                    });
+                    itemContainer.on('pointerout', () => {
+                        this.hideTooltip();
+                    });
+                    
+                    this.inventoryElements.push(itemContainer);
+                    
+                    // Remove right-click equip functionality - use drag and drop only
                 }
                 
-                this.inventoryElements.push(slot);
+                this.inventoryElements.push(slot, dropZone);
             }
         }
     }
     
+    setupInventorySlotInteractions(dropZone, slot, slotIndex, slotX, slotY, slotSize, padding) {
+        // Drop events
+        this.scene.input.on('drop', (pointer, gameObject, targetDropZone) => {
+            if (targetDropZone === dropZone && this.draggedItem) {
+                this.handleInventoryDrop(slotIndex);
+            }
+        });
+        
+        // Visual feedback for drag over
+        this.scene.input.on('dragenter', (pointer, gameObject, targetDropZone) => {
+            if (targetDropZone === dropZone) {
+                slot.clear();
+                slot.fillStyle(0x3a3a3a, 1);
+                slot.fillRect(slotX, slotY, slotSize - padding, slotSize - padding);
+                slot.lineStyle(3, 0x00ff00, 1);
+                slot.strokeRect(slotX, slotY, slotSize - padding, slotSize - padding);
+            }
+        });
+        
+        this.scene.input.on('dragleave', (pointer, gameObject, targetDropZone) => {
+            if (targetDropZone === dropZone) {
+                // Restore original appearance
+                slot.clear();
+                slot.fillStyle(0x1a1a1a, 1);
+                slot.fillRect(slotX, slotY, slotSize - padding, slotSize - padding);
+                slot.lineStyle(1, 0x666666, 1);
+                slot.strokeRect(slotX, slotY, slotSize - padding, slotSize - padding);
+            }
+        });
+    }
+    
     refreshInventoryPanel() {
         if (this.inventoryOpen && this.inventoryElements) {
+            // Clean up any drag icons that might be left over
+            if (this.dragIcon) {
+                this.dragIcon.destroy();
+                this.dragIcon = null;
+            }
+            this.draggedItem = null;
+            
             // Destroy current elements and recreate panel
             this.inventoryElements.forEach(element => {
                 if (element && element.destroy) {
@@ -1072,13 +1615,14 @@ class UIManager {
     }
     
     createSkillTreePanel() {
-        const panelWidth = 700;
-        const panelHeight = 400;
+        const panelWidth = 800;
+        const panelHeight = 500;
         const panelX = (this.scene.cameras.main.width - panelWidth) / 2;
         const panelY = 50;
         
         // Create skills panel elements without container for better interactivity
         this.skillTreePanelElements = [];
+        this.currentSkillTab = this.currentSkillTab || 'offensive';
         
         const bg = this.scene.add.graphics();
         bg.fillStyle(0x2a1810, 0.95);
@@ -1095,156 +1639,217 @@ class UIManager {
         
         this.skillTreePanelElements.push(bg, title);
         
-        // Create skill entries
-        this.createSkillEntries(panelX + 20, panelY + 60);
+        // Create skill tabs
+        this.createSkillTabs(panelX, panelY);
         
-        // Create draggable skill palette (moved further right to avoid overlap)
-        this.createSkillPalette(panelX + 380, panelY + 60);
+        // Create skill grid based on current tab
+        this.createSkillGrid(panelX, panelY);
     }
     
-    createSkillEntries(startX, startY) {
-        const skillNames = Object.keys(this.player.skills);
+    createSkillTabs(panelX, panelY) {
+        const tabWidth = 120;
+        const tabHeight = 30;
+        const tabY = panelY + 50;
+        const tabs = [
+            { id: 'offensive', name: 'Offensive', x: panelX + 50 },
+            { id: 'defensive', name: 'Defensive', x: panelX + 200 },
+            { id: 'passive', name: 'Passive', x: panelX + 350 }
+        ];
         
-        skillNames.forEach((skillName, index) => {
-            const skill = this.player.skills[skillName];
-            const y = startY + (index * 40);
+        tabs.forEach(tab => {
+            const isActive = this.currentSkillTab === tab.id;
             
-            const skillText = this.scene.add.text(startX, y, 
-                `${skillName.charAt(0).toUpperCase() + skillName.slice(1)}: ${skill.level}/${skill.maxLevel}`, {
-                fontSize: '14px',
-                fill: skill.level > 0 ? '#ffffff' : '#666666'
-            }).setScrollFactor(0).setDepth(2001);
+            // Tab background
+            const tabBg = this.scene.add.graphics();
+            tabBg.fillStyle(isActive ? 0x4a3020 : 0x2a1810, 1);
+            tabBg.fillRect(tab.x, tabY, tabWidth, tabHeight);
+            tabBg.lineStyle(2, isActive ? 0xffff00 : 0x8b4513, 1);
+            tabBg.strokeRect(tab.x, tabY, tabWidth, tabHeight);
+            tabBg.setScrollFactor(0).setDepth(2001);
             
-            this.skillTreePanelElements.push(skillText);
+            // Tab text
+            const tabText = this.scene.add.text(tab.x + tabWidth/2, tabY + tabHeight/2, tab.name, {
+                fontSize: '12px',
+                fill: isActive ? '#ffff00' : '#cccccc',
+                fontWeight: isActive ? 'bold' : 'normal'
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(2002);
             
-            if (this.player.skillPoints > 0 && skill.level < skill.maxLevel) {
-                const upgradeButton = this.scene.add.text(startX + 220, y, '+', {
-                    fontSize: '16px',
-                    fill: '#00ff00',
-                    backgroundColor: '#2a1810',
-                    padding: { x: 8, y: 4 }
-                }).setInteractive().setScrollFactor(0).setDepth(2002);
-                
-                upgradeButton.on('pointerdown', () => {
-                    if (this.player.upgradeSkill(skillName)) {
-                        this.closeSkillTree();
-                        this.openSkillTree(); // Refresh the panel
-                    }
-                });
-                
-                // Add hover effects
-                upgradeButton.on('pointerover', () => {
-                    upgradeButton.setStyle({ fill: '#00ff88', backgroundColor: '#3a2820' });
-                });
-                
-                upgradeButton.on('pointerout', () => {
-                    upgradeButton.setStyle({ fill: '#00ff00', backgroundColor: '#2a1810' });
-                });
-                
-                this.skillTreePanelElements.push(upgradeButton);
-            }
+            // Make tab interactive
+            const tabZone = this.scene.add.zone(tab.x, tabY, tabWidth, tabHeight)
+                .setOrigin(0).setScrollFactor(0).setDepth(2002).setInteractive();
+            
+            tabZone.on('pointerdown', () => {
+                if (this.currentSkillTab !== tab.id) {
+                    this.currentSkillTab = tab.id;
+                    this.closeSkillTree();
+                    this.openSkillTree();
+                }
+            });
+            
+            this.skillTreePanelElements.push(tabBg, tabText, tabZone);
         });
     }
     
-    createSkillPalette(startX, startY) {
-        // Title for palette
-        const paletteTitle = this.scene.add.text(startX, startY - 20, 'Drag to Hotbar:', {
+    createSkillGrid(panelX, panelY) {
+        const gridStartX = panelX + 50;
+        const gridStartY = panelY + 120;
+        const skillSize = 48;
+        const skillSpacing = 60;
+        const skillsPerRow = 10;
+        
+        // Define skill categories (only implemented skills)
+        const skillCategories = {
+            offensive: [
+                { name: 'fireball', display: 'Fireball', gridPos: [0, 0] },
+                { name: 'frostNova', display: 'Frost Nova', gridPos: [1, 0] },
+                { name: 'chainLightning', display: 'Chain Lightning', gridPos: [2, 0] },
+                { name: 'iceBolt', display: 'Ice Bolt', gridPos: [0, 1] },
+                { name: 'meteor', display: 'Meteor', gridPos: [1, 1] }
+            ],
+            defensive: [
+                { name: 'teleport', display: 'Teleport', gridPos: [0, 0] }
+            ],
+            passive: [
+                // No passive skills implemented yet
+            ]
+        };
+        
+        const currentSkills = skillCategories[this.currentSkillTab] || [];
+        
+        // Display available skill points
+        const skillPointsText = this.scene.add.text(gridStartX, gridStartY - 40, 
+            `Skill Points: ${this.player.skillPoints}`, {
             fontSize: '14px',
             fill: '#ffff00',
             fontWeight: 'bold'
         }).setScrollFactor(0).setDepth(2001);
-        this.skillTreePanelElements.push(paletteTitle);
+        this.skillTreePanelElements.push(skillPointsText);
         
-        // All available skills and actions
-        const availableItems = [
-            { type: 'skill', name: 'fireball', display: 'Fireball' },
-            { type: 'skill', name: 'frostNova', display: 'Frost Nova' },
-            { type: 'skill', name: 'teleport', display: 'Teleport' },
-            { type: 'skill', name: 'chainLightning', display: 'Chain Lightning' },
-            { type: 'skill', name: 'iceBolt', display: 'Ice Bolt' },
-            { type: 'skill', name: 'meteor', display: 'Meteor' },
-            { type: 'action', name: 'move', display: 'Move Action' }
-        ];
-        
-        availableItems.forEach((item, index) => {
-            const y = startY + (index * 50);
+        // Create skill grid
+        currentSkills.forEach(skillData => {
+            const [gridX, gridY] = skillData.gridPos;
+            const x = gridStartX + (gridX * skillSpacing);
+            const y = gridStartY + (gridY * skillSpacing);
             
-            // Create draggable skill icon
-            const skillSlot = this.scene.add.graphics();
-            skillSlot.fillStyle(0x1a1a1a, 1);
-            skillSlot.fillRect(startX - 20, y - 20, 40, 40);
-            skillSlot.lineStyle(2, 0x8b4513, 1);
-            skillSlot.strokeRect(startX - 20, y - 20, 40, 40);
-            skillSlot.setInteractive(new Phaser.Geom.Rectangle(startX - 20, y - 20, 40, 40), Phaser.Geom.Rectangle.Contains);
-            skillSlot.setScrollFactor(0).setDepth(2001);
+            const skill = this.player.skills[skillData.name];
+            const canUpgrade = skill && this.player.skillPoints > 0 && skill.level < skill.maxLevel;
+            const isLearned = skill && skill.level > 0;
+            
+            // Skill background
+            const skillBg = this.scene.add.graphics();
+            skillBg.fillStyle(isLearned ? 0x3a2810 : 0x1a1810, 1);
+            skillBg.fillRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
+            skillBg.lineStyle(2, isLearned ? 0x8b6513 : 0x4a3020, 1);
+            skillBg.strokeRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
+            skillBg.setScrollFactor(0).setDepth(2001);
             
             // Skill icon
             const skillIcon = this.scene.add.graphics();
-            skillIcon.x = startX;
+            skillIcon.x = x;
             skillIcon.y = y;
+            this.drawSkillIcon(skillIcon, skillData.name, !isLearned);
             skillIcon.setScrollFactor(0).setDepth(2002);
             
-            if (item.type === 'skill') {
-                const skill = this.player.skills[item.name];
-                const grayed = !skill || skill.level === 0;
-                this.drawSkillIcon(skillIcon, item.name, grayed);
-            } else if (item.type === 'action') {
-                this.drawActionIcon(skillIcon, item.name);
+            // Skill level counter (bottom-right corner)
+            if (isLearned) {
+                const levelCounter = this.scene.add.text(x + skillSize/2 - 8, y + skillSize/2 - 8, 
+                    skill.level.toString(), {
+                    fontSize: '10px',
+                    fill: '#ffff00',
+                    fontWeight: 'bold',
+                    backgroundColor: '#000000',
+                    padding: { x: 2, y: 1 }
+                }).setOrigin(0.5).setScrollFactor(0).setDepth(2003);
+                this.skillTreePanelElements.push(levelCounter);
             }
             
-            // Skill label
-            const skillLabel = this.scene.add.text(startX + 30, y, item.display, {
-                fontSize: '12px',
-                fill: '#ffffff'
-            }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(2001);
+            // Make skill interactive with drag capability
+            const skillZone = this.scene.add.zone(x, y, skillSize, skillSize)
+                .setScrollFactor(0).setDepth(2003).setInteractive({ draggable: isLearned });
             
-            // Make interactive for clicking only
-            skillSlot.setInteractive(new Phaser.Geom.Rectangle(startX - 20, y - 20, 40, 40), Phaser.Geom.Rectangle.Contains);
-            
-            // Simple click to assign
-            skillSlot.on('pointerdown', (pointer, localX, localY, event) => {
-                
-                // Find first empty hotbar slot
-                let assigned = false;
-                for (let i = 0; i < 8; i++) {
-                    if (!this.player.hotbar[i]) {
-                        this.player.hotbar[i] = { ...item };
-                        this.updateHotbar();
-                        assigned = true;
-                        break;
+            // Click to upgrade skill
+            skillZone.on('pointerdown', () => {
+                if (canUpgrade) {
+                    if (this.player.upgradeSkill(skillData.name)) {
+                        this.closeSkillTree();
+                        this.openSkillTree(); // Refresh the panel
                     }
                 }
+            });
+            
+            // Hover effects and tooltips
+            skillZone.on('pointerover', () => {
+                if (canUpgrade) {
+                    skillBg.clear();
+                    skillBg.fillStyle(0x5a4020, 1);
+                    skillBg.fillRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
+                    skillBg.lineStyle(2, 0xffff00, 1);
+                    skillBg.strokeRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
+                }
                 
-                // Show feedback message
-                if (assigned) {
-                    this.showFeedbackMessage(`${item.display} added to hotbar`, startX, y - 40, '#00ff00');
+                // Show tooltip
+                let tooltipText = skillData.display;
+                if (skill) {
+                    tooltipText += `\nLevel: ${skill.level}/${skill.maxLevel}`;
+                    if (skill.level > 0) {
+                        const damage = this.player.getSkillDamage(skillData.name);
+                        const manaCost = this.player.getSkillManaCost(skillData.name);
+                        if (damage > 0) tooltipText += `\nDamage: ${damage}`;
+                        if (manaCost > 0) tooltipText += `\nMana Cost: ${manaCost}`;
+                    }
+                    if (canUpgrade) {
+                        tooltipText += '\nClick to upgrade';
+                    }
+                    if (isLearned) {
+                        tooltipText += '\nDrag to hotbar';
+                    }
                 } else {
-                    this.showFeedbackMessage('Hotbar is full!', startX, y - 40, '#ff0000');
+                    tooltipText += '\nNot available';
                 }
+                this.showSimpleTooltip(tooltipText, x, y - skillSize);
+            });
+            
+            skillZone.on('pointerout', () => {
+                // Restore normal appearance
+                skillBg.clear();
+                skillBg.fillStyle(isLearned ? 0x3a2810 : 0x1a1810, 1);
+                skillBg.fillRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
+                skillBg.lineStyle(2, isLearned ? 0x8b6513 : 0x4a3020, 1);
+                skillBg.strokeRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
                 
-                event.stopPropagation();
-            });
-            
-            // Add tooltip for skill palette items
-            skillSlot.on('pointerover', () => {
-                let tooltipText = item.display;
-                if (item.type === 'skill') {
-                    const skill = this.player.skills[item.name];
-                    if (skill && skill.level > 0) {
-                        tooltipText += `\nLevel: ${skill.level}`;
-                    } else {
-                        tooltipText += '\nNot learned';
-                    }
-                }
-                tooltipText += '\nClick to add to hotbar';
-                this.showSimpleTooltip(tooltipText, startX, y - 30);
-            });
-            
-            skillSlot.on('pointerout', () => {
                 this.hideTooltip();
             });
             
-            this.skillTreePanelElements.push(skillSlot, skillIcon, skillLabel);
+            // Drag events for learned skills only
+            if (isLearned) {
+                skillZone.on('dragstart', (pointer) => {
+                    this.draggedItem = { type: 'skill', name: skillData.name, display: skillData.display };
+                    skillIcon.setAlpha(0.5);
+                    
+                    // Create drag icon
+                    this.dragIcon = this.scene.add.graphics();
+                    this.dragIcon.setScrollFactor(0).setDepth(5000);
+                    this.drawSkillIcon(this.dragIcon, skillData.name);
+                });
+                
+                skillZone.on('drag', (pointer, dragX, dragY) => {
+                    if (this.dragIcon) {
+                        this.dragIcon.x = pointer.x;
+                        this.dragIcon.y = pointer.y;
+                    }
+                });
+                
+                skillZone.on('dragend', (pointer) => {
+                    skillIcon.setAlpha(1);
+                    if (this.dragIcon) {
+                        this.dragIcon.destroy();
+                        this.dragIcon = null;
+                    }
+                    this.draggedItem = null;
+                });
+            }
+            
+            this.skillTreePanelElements.push(skillBg, skillIcon, skillZone);
         });
     }
     
@@ -1255,10 +1860,18 @@ class UIManager {
         this.closeSkillTree();
     }
     
-    showTooltip(slotIndex, x, y) {
-        this.hideTooltip(); // Hide any existing tooltip
+    showHotbarTooltip(slotType, slotIndex, x, y) {
+        this.hideTooltip();
         
-        const hotbarItem = this.player.hotbar[slotIndex];
+        let hotbarItem = null;
+        if (slotType === 'potion' && this.player.potionHotbar) {
+            hotbarItem = this.player.potionHotbar[slotIndex];
+        } else if (slotType === 'mouse' && this.player.mouseHotbar) {
+            hotbarItem = this.player.mouseHotbar[slotIndex];
+        } else if (slotType === 'skill' && this.player.skillsHotbar) {
+            hotbarItem = this.player.skillsHotbar[slotIndex];
+        }
+        
         if (!hotbarItem) return;
         
         let tooltipText = '';
@@ -1281,7 +1894,9 @@ class UIManager {
             }
         } else if (hotbarItem.type === 'item') {
             const item = hotbarItem.item;
-            tooltipText = item.getTooltipText().join('\n');
+            if (item) {
+                tooltipText = item.getTooltipText().join('\n');
+            }
         } else if (hotbarItem.type === 'action') {
             if (hotbarItem.name === 'move') {
                 tooltipText = 'Move\nClick to move to target location';
@@ -1289,12 +1904,6 @@ class UIManager {
         }
         
         if (tooltipText) {
-            // Create tooltip background
-            this.tooltipBg = this.scene.add.graphics();
-            this.tooltipBg.fillStyle(0x000000, 0.9);
-            this.tooltipBg.lineStyle(2, 0x8b4513, 1);
-            
-            // Create tooltip text
             this.tooltipText = this.scene.add.text(x, y, tooltipText, {
                 fontSize: '12px',
                 fill: '#ffffff',
@@ -1302,12 +1911,6 @@ class UIManager {
                 padding: { x: 8, y: 6 },
                 align: 'left'
             }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(3000);
-            
-            // Position and size background to match text
-            const bounds = this.tooltipText.getBounds();
-            this.tooltipBg.fillRect(bounds.x - 4, bounds.y - 4, bounds.width + 8, bounds.height + 8);
-            this.tooltipBg.strokeRect(bounds.x - 4, bounds.y - 4, bounds.width + 8, bounds.height + 8);
-            this.tooltipBg.setScrollFactor(0).setDepth(2999);
         }
     }
     
@@ -1360,10 +1963,292 @@ class UIManager {
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
     
+    removeFromHotbar(slotType, slotIndex) {
+        let hotbarItem = null;
+        
+        if (slotType === 'potion' && this.player.potionHotbar) {
+            hotbarItem = this.player.potionHotbar[slotIndex];
+            if (hotbarItem && hotbarItem.type === 'item') {
+                // Try to add the potion back to inventory
+                const success = this.addItemToInventory(hotbarItem.item);
+                if (success) {
+                    this.player.potionHotbar[slotIndex] = null;
+                    this.updatePotionHotbar();
+                    this.showFeedbackMessage(`${hotbarItem.item.name} returned to inventory`, 
+                        this.getSlotByType(slotType, slotIndex).x, 
+                        this.getSlotByType(slotType, slotIndex).y - 40, 
+                        '#00ff88');
+                } else {
+                    this.showFeedbackMessage('Inventory full!', 
+                        this.getSlotByType(slotType, slotIndex).x, 
+                        this.getSlotByType(slotType, slotIndex).y - 40, 
+                        '#ff0000');
+                }
+                return; // Exit early for potions
+            }
+        } else if (slotType === 'mouse' && this.player.mouseHotbar) {
+            hotbarItem = this.player.mouseHotbar[slotIndex];
+            if (hotbarItem && hotbarItem.type !== 'action') { // Don't remove move action
+                this.player.mouseHotbar[slotIndex] = null;
+                this.updateMouseHotbar();
+            }
+        } else if (slotType === 'skill' && this.player.skillsHotbar) {
+            hotbarItem = this.player.skillsHotbar[slotIndex];
+            if (hotbarItem) {
+                this.player.skillsHotbar[slotIndex] = null;
+                this.updateSkillsHotbar();
+            }
+        }
+        
+        if (hotbarItem) {
+            const itemName = hotbarItem.type === 'skill' ? 
+                this.capitalizeFirst(hotbarItem.name) : 
+                hotbarItem.item ? hotbarItem.item.name : 'Item';
+            this.showFeedbackMessage(`${itemName} removed`, 
+                this.getSlotByType(slotType, slotIndex).x, 
+                this.getSlotByType(slotType, slotIndex).y - 40, 
+                '#ff8800');
+        }
+    }
+    
+    handleDrop(slotType, slotIndex) {
+        if (!this.draggedItem) return;
+        
+        // Check if item type is compatible with slot type
+        if (slotType === 'potion' && this.draggedItem.type !== 'item') {
+            this.showFeedbackMessage('Only potions allowed here', 
+                this.getSlotByType(slotType, slotIndex).x, 
+                this.getSlotByType(slotType, slotIndex).y - 40, 
+                '#ff0000');
+            this.restoreSlotAppearance(slotType, slotIndex);
+            return;
+        }
+        
+        if ((slotType === 'mouse' || slotType === 'skill') && 
+            this.draggedItem.type === 'item') {
+            this.showFeedbackMessage('Only skills allowed here', 
+                this.getSlotByType(slotType, slotIndex).x, 
+                this.getSlotByType(slotType, slotIndex).y - 40, 
+                '#ff0000');
+            this.restoreSlotAppearance(slotType, slotIndex);
+            return;
+        }
+        
+        // Special handling for potion stacks
+        if (slotType === 'potion' && this.draggedItem.type === 'item' && this.draggedItem.item) {
+            const existingItem = this.player.potionHotbar[slotIndex];
+            
+            // If there's already a potion in this slot, try to stack them
+            if (existingItem && existingItem.type === 'item' && 
+                existingItem.item.canStackWith(this.draggedItem.item)) {
+                
+                const spaceAvailable = existingItem.item.maxStackSize - existingItem.item.stackSize;
+                const amountToAdd = Math.min(spaceAvailable, this.draggedItem.item.stackSize);
+                
+                existingItem.item.stackSize += amountToAdd;
+                this.draggedItem.item.stackSize -= amountToAdd;
+                
+                // Update inventory - either remove completely or update the remaining stack
+                if (this.draggedItem.inventorySlot !== undefined) {
+                    if (this.draggedItem.item.stackSize <= 0) {
+                        // Remove completely if all items were moved
+                        this.player.inventory.items[this.draggedItem.inventorySlot] = null;
+                    }
+                    // Note: If stackSize > 0, the remaining items stay in inventory
+                }
+                
+                this.updatePotionHotbar();
+                if (this.inventoryOpen) {
+                    this.refreshInventoryPanel();
+                }
+                
+                this.showFeedbackMessage(`Stacked ${amountToAdd} potions`, 
+                    this.getSlotByType(slotType, slotIndex).x, 
+                    this.getSlotByType(slotType, slotIndex).y - 40, 
+                    '#00ff00');
+                this.restoreSlotAppearance(slotType, slotIndex);
+                return;
+            }
+            
+            // Otherwise, place the item normally and remove from inventory
+            this.player.potionHotbar[slotIndex] = { ...this.draggedItem };
+            
+            // Remove from inventory only if it came from inventory (not from another hotbar slot)
+            if (this.draggedItem.inventorySlot !== undefined) {
+                this.player.inventory.items[this.draggedItem.inventorySlot] = null;
+                if (this.inventoryOpen) {
+                    this.refreshInventoryPanel();
+                }
+            }
+            
+            this.updatePotionHotbar();
+            this.restoreSlotAppearance(slotType, slotIndex);
+        } else if (slotType === 'mouse' && this.player.mouseHotbar) {
+            this.player.mouseHotbar[slotIndex] = { ...this.draggedItem };
+            this.updateMouseHotbar();
+        } else if (slotType === 'skill' && this.player.skillsHotbar) {
+            this.player.skillsHotbar[slotIndex] = { ...this.draggedItem };
+            this.updateSkillsHotbar();
+        }
+        
+        this.showFeedbackMessage(`${this.draggedItem.display || this.draggedItem.name} assigned`, 
+            this.getSlotByType(slotType, slotIndex).x, 
+            this.getSlotByType(slotType, slotIndex).y - 40, 
+            '#00ff00');
+        
+        // Restore slot appearance after successful drop
+        this.restoreSlotAppearance(slotType, slotIndex);
+    }
+    
+    handleInventoryDrop(targetSlotIndex) {
+        if (!this.draggedItem) return;
+        
+        // Only handle item drops in inventory
+        if (this.draggedItem.type !== 'item') {
+            this.showFeedbackMessage('Only items can be placed in inventory', 
+                400, 300, '#ff0000');
+            this.restoreInventorySlotAppearance(targetSlotIndex);
+            return;
+        }
+        
+        const draggedItem = this.draggedItem.item;
+        const existingItem = this.player.inventory.items[targetSlotIndex];
+        
+        // If target slot has an item, try to stack or swap
+        if (existingItem) {
+            // Try to stack if items are compatible
+            if (draggedItem.canStackWith && draggedItem.canStackWith(existingItem)) {
+                const spaceAvailable = existingItem.maxStackSize - existingItem.stackSize;
+                const amountToAdd = Math.min(spaceAvailable, draggedItem.stackSize);
+                
+                existingItem.stackSize += amountToAdd;
+                draggedItem.stackSize -= amountToAdd;
+                
+                // If all items were stacked, remove from source
+                if (draggedItem.stackSize <= 0) {
+                    this.removeItemFromSource();
+                } else {
+                    // Update source inventory slot with remaining items
+                    if (this.draggedItem.inventorySlot !== undefined) {
+                        // Source is inventory - item already updated
+                    }
+                }
+                
+                this.showFeedbackMessage(`Stacked ${amountToAdd} items`, 
+                    400, 300, '#00ff00');
+            } else {
+                // Swap items
+                this.swapInventoryItems(targetSlotIndex);
+            }
+        } else {
+            // Target slot is empty - place item there
+            this.player.inventory.items[targetSlotIndex] = draggedItem;
+            this.removeItemFromSource();
+            
+            this.showFeedbackMessage(`${draggedItem.name} moved`, 
+                400, 300, '#00ff00');
+        }
+        
+        // Refresh inventory UI
+        this.refreshInventoryPanel();
+        this.restoreInventorySlotAppearance(targetSlotIndex);
+    }
+    
+    removeItemFromSource() {
+        if (this.draggedItem.inventorySlot !== undefined) {
+            // Source is inventory
+            this.player.inventory.items[this.draggedItem.inventorySlot] = null;
+        } else if (this.draggedItem.equipmentSlot) {
+            // Source is equipment
+            this.player.equipment[this.draggedItem.equipmentSlot] = null;
+            this.player.updateDerivedStats();
+        }
+    }
+    
+    swapInventoryItems(targetSlotIndex) {
+        const draggedItem = this.draggedItem.item;
+        const targetItem = this.player.inventory.items[targetSlotIndex];
+        
+        // Place dragged item in target slot
+        this.player.inventory.items[targetSlotIndex] = draggedItem;
+        
+        // Move target item to source location
+        if (this.draggedItem.inventorySlot !== undefined) {
+            // Source was inventory - place target item there
+            this.player.inventory.items[this.draggedItem.inventorySlot] = targetItem;
+        } else if (this.draggedItem.equipmentSlot) {
+            // Source was equipment - try to equip target item or place in inventory
+            if (targetItem.canEquip && targetItem.canEquip(this.draggedItem.equipmentSlot)) {
+                this.player.equipment[this.draggedItem.equipmentSlot] = targetItem;
+                this.player.updateDerivedStats();
+            } else {
+                // Find empty inventory slot for displaced equipment item
+                const emptySlot = this.player.inventory.items.findIndex(slot => slot === null);
+                if (emptySlot !== -1) {
+                    this.player.inventory.items[emptySlot] = targetItem;
+                } else {
+                    // No space - cancel the operation
+                    this.showFeedbackMessage('No space to swap items', 400, 300, '#ff0000');
+                    return;
+                }
+            }
+        }
+        
+        this.showFeedbackMessage(`Items swapped`, 400, 300, '#00ff00');
+    }
+    
+    restoreInventorySlotAppearance(slotIndex) {
+        // This will be handled by refreshInventoryPanel, but we can add specific logic if needed
+        // For now, the refresh handles restoring all slot appearances
+    }
+    
+    getSlotByType(slotType, slotIndex) {
+        if (slotType === 'potion') return this.potionHotbarSlots[slotIndex];
+        if (slotType === 'mouse') return this.mouseHotbarSlots[slotIndex];
+        if (slotType === 'skill') return this.skillsHotbarSlots[slotIndex];
+        return null;
+    }
+    
+    restoreSlotAppearance(slotType, slotIndex) {
+        const slotData = this.getSlotByType(slotType, slotIndex);
+        if (!slotData) return;
+        
+        const { slot, x, y, size } = slotData;
+        const slotColor = slotType === 'mouse' ? 0x2a2a2a : 0x1a1a1a;
+        const borderColor = slotType === 'mouse' ? 0xa0522d : 0x8b4513;
+        
+        slot.clear();
+        slot.fillStyle(slotColor, 1);
+        slot.fillRect(x - size/2, y - size/2, size, size);
+        slot.lineStyle(2, borderColor, 1);
+        slot.strokeRect(x - size/2, y - size/2, size, size);
+    }
     
     
     addItemToInventory(item) {
-        // Find first empty slot
+        // First try to stack with existing items if stackable
+        if (item.stackable) {
+            for (let i = 0; i < this.player.inventory.items.length; i++) {
+                const existingItem = this.player.inventory.items[i];
+                if (existingItem && existingItem.canStackWith(item)) {
+                    const spaceAvailable = existingItem.maxStackSize - existingItem.stackSize;
+                    const amountToAdd = Math.min(spaceAvailable, item.stackSize);
+                    
+                    existingItem.stackSize += amountToAdd;
+                    item.stackSize -= amountToAdd;
+                    
+                    // If all items were stacked, we're done
+                    if (item.stackSize <= 0) {
+                        if (this.inventoryOpen) {
+                            this.refreshInventoryPanel();
+                        }
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // If we still have items left, find an empty slot
         for (let i = 0; i < this.player.inventory.items.length; i++) {
             if (this.player.inventory.items[i] === null) {
                 this.player.inventory.items[i] = item;
@@ -1376,6 +2261,7 @@ class UIManager {
                 return true;
             }
         }
+        
         return false; // Inventory full
     }
     
@@ -1389,17 +2275,19 @@ class UIManager {
                 } else {
                     this.player.inventory.items[index] = null;
                     
-                    // Remove from hotbar if it was the last one
-                    for (let i = 0; i < this.player.hotbar.length; i++) {
-                        if (this.player.hotbar[i] && this.player.hotbar[i].type === 'item' && this.player.hotbar[i].item === item) {
-                            this.player.hotbar[i] = null;
+                    // Remove from hotbars if it was the last one
+                    if (this.player.potionHotbar) {
+                        for (let i = 0; i < this.player.potionHotbar.length; i++) {
+                            if (this.player.potionHotbar[i] && this.player.potionHotbar[i].type === 'item' && this.player.potionHotbar[i].item === item) {
+                                this.player.potionHotbar[i] = null;
+                            }
                         }
                     }
                 }
             }
             
-            // Update hotbar and inventory UI
-            this.updateHotbar();
+            // Update hotbars and inventory UI
+            this.updateAllHotbars();
             if (this.inventoryOpen) {
                 this.refreshInventoryPanel();
             }
@@ -1410,16 +2298,20 @@ class UIManager {
     }
     
     addItemToHotbar(item) {
-        // Find first empty hotbar slot for consumables
-        for (let i = 0; i < 6; i++) { // Only use keyboard slots (0-5)
-            if (!this.player.hotbar[i]) {
-                this.player.hotbar[i] = { type: 'item', item: item };
-                this.updateHotbar();
-                this.showFeedbackMessage(`${item.name} added to hotbar`, 400, 300, '#00ff00');
+        // Find first empty potion hotbar slot
+        if (!this.player.potionHotbar) {
+            this.player.potionHotbar = new Array(2).fill(null);
+        }
+        
+        for (let i = 0; i < 2; i++) {
+            if (!this.player.potionHotbar[i]) {
+                this.player.potionHotbar[i] = { type: 'item', item: item };
+                this.updatePotionHotbar();
+                this.showFeedbackMessage(`${item.name} added to potion hotbar`, 400, 300, '#00ff00');
                 return true;
             }
         }
-        this.showFeedbackMessage('Hotbar is full!', 400, 300, '#ff0000');
+        this.showFeedbackMessage('Potion hotbar is full!', 400, 300, '#ff0000');
         return false;
     }
     
@@ -1432,17 +2324,22 @@ class UIManager {
         if (equipSlot === 'ring1') {
             if (this.player.equipment.ring1 === null) {
                 this.player.equipment.ring1 = item;
+                this.player.inventory.items[inventorySlot] = null;
+                this.showFeedbackMessage(`${item.name} equipped in ring slot 1`, 400, 300, '#00ff00');
             } else if (this.player.equipment.ring2 === null) {
                 this.player.equipment.ring2 = item;
+                this.player.inventory.items[inventorySlot] = null;
+                this.showFeedbackMessage(`${item.name} equipped in ring slot 2`, 400, 300, '#00ff00');
             } else {
                 // Replace ring1 and move old ring to inventory
                 const oldRing = this.player.equipment.ring1;
                 this.player.equipment.ring1 = item;
                 this.player.inventory.items[inventorySlot] = oldRing;
                 this.showFeedbackMessage(`${item.name} equipped, ${oldRing.name} moved to inventory`, 400, 300, '#ffff00');
-                this.refreshInventoryPanel();
-                return true;
             }
+            this.player.updateDerivedStats();
+            this.refreshInventoryPanel();
+            return true;
         } else {
             // Handle other equipment slots
             const oldItem = this.player.equipment[equipSlot];
@@ -1489,5 +2386,182 @@ class UIManager {
         
         this.showFeedbackMessage('Inventory full! Cannot unequip item.', 400, 300, '#ff0000');
         return false;
+    }
+    
+    // New methods for equipment slot interactions and highlighting
+    setupEquipmentSlotInteractions(equipSlot, slot, dropZone, slotSize) {
+        // Drop events for equipment slots
+        this.scene.input.on('drop', (pointer, gameObject, targetDropZone) => {
+            if (targetDropZone === dropZone && this.draggedItem) {
+                this.handleEquipmentDrop(equipSlot.slot);
+            }
+        });
+        
+        // Visual feedback for drag over equipment slots
+        this.scene.input.on('dragenter', (pointer, gameObject, targetDropZone) => {
+            if (targetDropZone === dropZone && this.draggedItem && this.draggedItem.type === 'item') {
+                // Check if item can be equipped in this slot
+                if (this.canEquipInSlot(this.draggedItem.item, equipSlot.slot)) {
+                    slot.clear();
+                    slot.fillStyle(0x2a4a2a, 1);
+                    slot.fillRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+                    slot.lineStyle(3, 0x00ff00, 1);
+                    slot.strokeRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+                } else {
+                    slot.clear();
+                    slot.fillStyle(0x4a2a2a, 1);
+                    slot.fillRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+                    slot.lineStyle(3, 0xff0000, 1);
+                    slot.strokeRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+                }
+            }
+        });
+        
+        this.scene.input.on('dragleave', (pointer, gameObject, targetDropZone) => {
+            if (targetDropZone === dropZone) {
+                this.restoreEquipmentSlotAppearance(slot, equipSlot, slotSize);
+            }
+        });
+    }
+    
+    setupEquippedItemDrag(container, item) {
+        container.on('dragstart', (pointer) => {
+            this.draggedItem = container.itemData;
+            container.setAlpha(0.5);
+            
+            // Create drag icon
+            this.dragIcon = this.scene.add.graphics();
+            this.dragIcon.setScrollFactor(0).setDepth(5000);
+            this.drawItemIcon(this.dragIcon, item);
+            
+            // Highlight compatible slots
+            this.highlightCompatibleSlots(item);
+        });
+        
+        container.on('drag', (pointer, dragX, dragY) => {
+            if (this.dragIcon) {
+                this.dragIcon.x = pointer.x;
+                this.dragIcon.y = pointer.y;
+            }
+        });
+        
+        container.on('dragend', (pointer) => {
+            container.setAlpha(1);
+            if (this.dragIcon) {
+                this.dragIcon.destroy();
+                this.dragIcon = null;
+            }
+            this.draggedItem = null;
+            
+            // Remove slot highlighting
+            this.clearSlotHighlighting();
+        });
+    }
+    
+    highlightCompatibleSlots(item) {
+        if (!this.inventoryElements) return;
+        
+        // Store highlighted slots for later clearing
+        this.highlightedSlots = [];
+        
+        // Find equipment slots in the current inventory panel
+        const equipmentSlots = [
+            { slot: 'helmet', x: 120, y: 85 },
+            { slot: 'amulet', x: 180, y: 125 },
+            { slot: 'armor', x: 120, y: 185 },
+            { slot: 'weapon', x: 60, y: 185 },
+            { slot: 'shield', x: 180, y: 185 },
+            { slot: 'ring1', x: 60, y: 245 },
+            { slot: 'belt', x: 120, y: 245 },
+            { slot: 'ring2', x: 180, y: 245 },
+            { slot: 'gloves', x: 60, y: 305 },
+            { slot: 'boots', x: 120, y: 305 }
+        ];
+        
+        // Highlight compatible equipment slots
+        equipmentSlots.forEach(equipSlot => {
+            if (this.canEquipInSlot(item, equipSlot.slot)) {
+                // Find the graphics object for this slot and highlight it
+                this.inventoryElements.forEach(element => {
+                    if (element.getData && element.getData('equipSlot') === equipSlot.slot) {
+                        this.highlightSlot(element, equipSlot, true);
+                        this.highlightedSlots.push({ element, equipSlot });
+                    }
+                });
+            }
+        });
+    }
+    
+    clearSlotHighlighting() {
+        if (this.highlightedSlots) {
+            this.highlightedSlots.forEach(({ element, equipSlot }) => {
+                this.restoreEquipmentSlotAppearance(element, equipSlot, 40);
+            });
+            this.highlightedSlots = [];
+        }
+    }
+    
+    highlightSlot(slot, equipSlot, compatible) {
+        const slotSize = 40;
+        const color = compatible ? 0x00ff00 : 0xff0000;
+        const bgColor = compatible ? 0x2a4a2a : 0x4a2a2a;
+        
+        slot.clear();
+        slot.fillStyle(bgColor, 1);
+        slot.fillRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+        slot.lineStyle(3, color, 1);
+        slot.strokeRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+    }
+    
+    restoreEquipmentSlotAppearance(slot, equipSlot, slotSize) {
+        slot.clear();
+        slot.fillStyle(0x1a1a1a, 1);
+        slot.fillRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+        slot.lineStyle(2, 0x8b4513, 1);
+        slot.strokeRect(equipSlot.x - slotSize/2, equipSlot.y - slotSize/2, slotSize, slotSize);
+    }
+    
+    canEquipInSlot(item, targetSlot) {
+        if (!item.equipSlot) return false;
+        
+        // Handle ring special case
+        if (item.equipSlot === 'ring1' && (targetSlot === 'ring1' || targetSlot === 'ring2')) {
+            return true;
+        }
+        
+        return item.equipSlot === targetSlot;
+    }
+    
+    handleEquipmentDrop(targetSlot) {
+        if (!this.draggedItem || this.draggedItem.type !== 'item') return;
+        
+        const item = this.draggedItem.item;
+        
+        // Check if item can be equipped in this slot
+        if (!this.canEquipInSlot(item, targetSlot)) {
+            this.showFeedbackMessage('Cannot equip item in this slot', 400, 300, '#ff0000');
+            return;
+        }
+        
+        // Handle equipping from inventory
+        if (this.draggedItem.inventorySlot !== undefined) {
+            // Use the existing equipItem method which handles rings properly
+            this.equipItem(item, this.draggedItem.inventorySlot);
+        }
+        // Handle moving between equipment slots
+        else if (this.draggedItem.equipmentSlot !== undefined) {
+            const sourceSlot = this.draggedItem.equipmentSlot;
+            const oldItem = this.player.equipment[targetSlot];
+            
+            // Swap items
+            this.player.equipment[targetSlot] = item;
+            this.player.equipment[sourceSlot] = oldItem;
+            
+            this.showFeedbackMessage(`${item.name} moved to ${targetSlot}`, 400, 300, '#00ff00');
+            
+            // Update player stats and refresh UI
+            this.player.updateDerivedStats();
+            this.refreshInventoryPanel();
+        }
     }
 }

@@ -88,6 +88,11 @@ class Meteor extends Phaser.GameObjects.Sprite {
         
         // Damage all enemies in impact radius
         this.scene.enemies.getChildren().forEach(enemy => {
+            // Check if enemy is still valid before interacting with it
+            if (!enemy || !enemy.active || !enemy.scene) {
+                return;
+            }
+            
             const distance = Phaser.Math.Distance.Between(this.targetX, this.targetY, enemy.x, enemy.y);
             if (distance <= this.impact) {
                 // Damage decreases with distance from center

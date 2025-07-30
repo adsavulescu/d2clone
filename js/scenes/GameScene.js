@@ -63,38 +63,26 @@ class GameScene extends Phaser.Scene {
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             
             if (pointer.leftButtonDown()) {
-                // Left click - use LMB hotbar slot (index 6)
-                this.handleHotbarAction(6, worldPoint);
+                // Left click - use LMB mouse hotbar slot (index 0)
+                if (this.uiManager) {
+                    this.uiManager.useMouseHotbarSlot(0, worldPoint);
+                }
                 
             } else if (pointer.rightButtonDown()) {
-                // Right click - use RMB hotbar slot (index 7)
-                this.handleHotbarAction(7, worldPoint);
+                // Right click - use RMB mouse hotbar slot (index 2)
+                if (this.uiManager) {
+                    this.uiManager.useMouseHotbarSlot(2, worldPoint);
+                }
                 
             } else if (pointer.middleButtonDown()) {
-                // Middle click to teleport (legacy)
-                this.player.castTeleport(worldPoint.x, worldPoint.y);
+                // Middle click - use MMB mouse hotbar slot (index 1)
+                if (this.uiManager) {
+                    this.uiManager.useMouseHotbarSlot(1, worldPoint);
+                }
             }
         });
         
-        // Keyboard controls for hotbar slots 1-6
-        this.input.keyboard.on('keydown-ONE', () => {
-            this.handleHotbarAction(0, this.getPlayerCursorWorldPoint());
-        });
-        this.input.keyboard.on('keydown-TWO', () => {
-            this.handleHotbarAction(1, this.getPlayerCursorWorldPoint());
-        });
-        this.input.keyboard.on('keydown-THREE', () => {
-            this.handleHotbarAction(2, this.getPlayerCursorWorldPoint());
-        });
-        this.input.keyboard.on('keydown-FOUR', () => {
-            this.handleHotbarAction(3, this.getPlayerCursorWorldPoint());
-        });
-        this.input.keyboard.on('keydown-FIVE', () => {
-            this.handleHotbarAction(4, this.getPlayerCursorWorldPoint());
-        });
-        this.input.keyboard.on('keydown-SIX', () => {
-            this.handleHotbarAction(5, this.getPlayerCursorWorldPoint());
-        });
+        // Keyboard controls now handled by UIManager
         
         // Enable right-click context menu prevention
         this.input.mouse.disableContextMenu();
@@ -106,142 +94,40 @@ class GameScene extends Phaser.Scene {
         return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     }
     
-    handleHotbarAction(slotIndex, worldPoint) {
-        const hotbarItem = this.player.hotbar[slotIndex];
-        if (!hotbarItem) return;
+    // handleHotbarAction is now handled by UIManager
+    
+    createMoveMarker(x, y) {
+        if (this.moveMarker) {
+            this.moveMarker.destroy();
+        }
         
-        if (hotbarItem.type === 'skill') {
-            this.handleSkillCast(hotbarItem.name, worldPoint);
-        } else if (hotbarItem.type === 'item') {
-            this.uiManager.useItem(hotbarItem.item);
-        } else if (hotbarItem.type === 'action') {
-            if (hotbarItem.name === 'move') {
-                this.handleMovement(worldPoint);
+        this.moveMarker = this.add.graphics();
+        this.moveMarker.lineStyle(2, 0x00ff00, 1);
+        this.moveMarker.strokeCircle(x, y, 10);
+        this.moveMarker.setDepth(100);
+        
+        // Fade out the marker
+        this.tweens.add({
+            targets: this.moveMarker,
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => {
+                if (this.moveMarker) {
+                    this.moveMarker.destroy();
+                    this.moveMarker = null;
+                }
             }
-        }
-    }
-    
-    handleSkillCast(skillName, worldPoint) {
-        switch (skillName) {
-            case 'fireball':
-                this.player.castFireball(worldPoint.x, worldPoint.y);
-                break;
-            case 'frostNova':
-                this.player.castFrostNova();
-                break;
-            case 'teleport':
-                this.player.castTeleport(worldPoint.x, worldPoint.y);
-                break;
-            case 'chainLightning':
-                this.player.castChainLightning();
-                break;
-            case 'iceBolt':
-                this.player.castIceBolt(worldPoint.x, worldPoint.y);
-                break;
-            case 'meteor':
-                this.player.castMeteor(worldPoint.x, worldPoint.y);
-                break;
-        }
-    }
-    
-    handleMovement(worldPoint) {
-        // Movement logic
-        this.playerTarget = { x: worldPoint.x, y: worldPoint.y };
-        
-        // Visual feedback for movement target
-        if (this.moveTarget) this.moveTarget.destroy();
-        this.moveTarget = this.add.graphics();
-        this.moveTarget.lineStyle(2, 0xffffff, 0.8);
-        this.moveTarget.strokeCircle(worldPoint.x, worldPoint.y, 10);
-        this.moveTarget.setDepth(100);
-        
-        this.time.delayedCall(1000, () => {
-            if (this.moveTarget) this.moveTarget.destroy();
         });
     }
     
+    // Skill casting and movement now handled by UIManager
+    
     setupUI() {
-        // Create basic bottom panel for health/mana orbs only
-        this.createBottomPanel();
-        this.createHealthOrb();
-        this.createManaOrb();
         this.createInfoPanel();
     }
     
-    createBottomPanel() {
-        const panelHeight = 120;
-        const panelY = this.cameras.main.height - panelHeight;
-        
-        // Main panel background
-        this.bottomPanel = this.add.graphics();
-        this.bottomPanel.fillStyle(0x2a1810, 0.95);
-        this.bottomPanel.fillRect(0, panelY, this.cameras.main.width, panelHeight);
-        
-        // Panel border
-        this.bottomPanel.lineStyle(2, 0x8b4513, 1);
-        this.bottomPanel.strokeRect(0, panelY, this.cameras.main.width, panelHeight);
-        
-        // Decorative lines
-        this.bottomPanel.lineStyle(1, 0x654321, 0.8);
-        this.bottomPanel.lineBetween(0, panelY + 5, this.cameras.main.width, panelY + 5);
-        this.bottomPanel.lineBetween(0, panelY + panelHeight - 5, this.cameras.main.width, panelY + panelHeight - 5);
-        
-        this.bottomPanel.setScrollFactor(0).setDepth(1000);
-    }
     
-    createHealthOrb() {
-        const orbSize = 80;
-        const orbX = 50;
-        const orbY = this.cameras.main.height - 100;
-        
-        // Health orb background (dark red)
-        this.healthOrbBg = this.add.graphics();
-        this.healthOrbBg.fillStyle(0x330000, 1);
-        this.healthOrbBg.fillCircle(orbX, orbY, orbSize / 2);
-        this.healthOrbBg.lineStyle(3, 0x8b0000, 1);
-        this.healthOrbBg.strokeCircle(orbX, orbY, orbSize / 2);
-        this.healthOrbBg.setScrollFactor(0).setDepth(1001);
-        
-        // Health orb fill
-        this.healthOrb = this.add.graphics();
-        this.healthOrb.setScrollFactor(0).setDepth(1002);
-        
-        // Health text
-        this.healthText = this.add.text(orbX, orbY, '', {
-            fontSize: '14px',
-            fill: '#ffffff',
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
-    }
     
-    createManaOrb() {
-        const orbSize = 80;
-        const orbX = this.cameras.main.width - 50;
-        const orbY = this.cameras.main.height - 100;
-        
-        // Mana orb background (dark blue)
-        this.manaOrbBg = this.add.graphics();
-        this.manaOrbBg.fillStyle(0x000033, 1);
-        this.manaOrbBg.fillCircle(orbX, orbY, orbSize / 2);
-        this.manaOrbBg.lineStyle(3, 0x000088, 1);
-        this.manaOrbBg.strokeCircle(orbX, orbY, orbSize / 2);
-        this.manaOrbBg.setScrollFactor(0).setDepth(1001);
-        
-        // Mana orb fill
-        this.manaOrb = this.add.graphics();
-        this.manaOrb.setScrollFactor(0).setDepth(1002);
-        
-        // Mana text
-        this.manaText = this.add.text(orbX, orbY, '', {
-            fontSize: '14px',
-            fill: '#ffffff',
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
-    }
     
     createSkillBar() {
         const skillBarY = this.cameras.main.height - 60;
@@ -698,13 +584,6 @@ class GameScene extends Phaser.Scene {
             }
         }
         
-        // Keep old orbs working alongside new UI
-        if (this.healthOrb) {
-            this.updateHealthOrb();
-        }
-        if (this.manaOrb) {
-            this.updateManaOrb();
-        }
     }
     
     pickupItem(player, itemSprite) {
@@ -746,49 +625,7 @@ class GameScene extends Phaser.Scene {
         }
     }
     
-    updateHealthOrb() {
-        const orbSize = 80;
-        const orbX = 50;
-        const orbY = this.cameras.main.height - 100;
-        const healthPercent = this.player.health / this.player.maxHealth;
-        
-        this.healthOrb.clear();
-        
-        // Create gradient effect for health orb
-        const radius = orbSize / 2 - 2;
-        const startAngle = Math.PI * 1.5; // Start from top
-        const endAngle = startAngle + (Math.PI * 2 * healthPercent);
-        
-        if (healthPercent > 0) {
-            this.healthOrb.fillStyle(0xff0000, 0.8);
-            this.healthOrb.slice(orbX, orbY, radius, startAngle, endAngle, false);
-            this.healthOrb.fillPath();
-        }
-        
-        this.healthText.setText(`${Math.floor(this.player.health)}`);
-    }
     
-    updateManaOrb() {
-        const orbSize = 80;
-        const orbX = this.cameras.main.width - 50;
-        const orbY = this.cameras.main.height - 100;
-        const manaPercent = this.player.mana / this.player.maxMana;
-        
-        this.manaOrb.clear();
-        
-        // Create gradient effect for mana orb
-        const radius = orbSize / 2 - 2;
-        const startAngle = Math.PI * 1.5; // Start from top
-        const endAngle = startAngle + (Math.PI * 2 * manaPercent);
-        
-        if (manaPercent > 0) {
-            this.manaOrb.fillStyle(0x0088ff, 0.8);
-            this.manaOrb.slice(orbX, orbY, radius, startAngle, endAngle, false);
-            this.manaOrb.fillPath();
-        }
-        
-        this.manaText.setText(`${Math.floor(this.player.mana)}`);
-    }
     
     updateSkillCooldowns(time) {
         const skillBarY = this.cameras.main.height - 60;

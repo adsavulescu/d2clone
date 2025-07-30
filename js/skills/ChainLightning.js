@@ -27,6 +27,11 @@ class ChainLightning extends Phaser.GameObjects.Sprite {
         let closestDistance = Infinity;
         
         availableTargets.forEach(target => {
+            // Check if target is still valid before interacting with it
+            if (!target || !target.active || !target.scene) {
+                return;
+            }
+            
             if (!this.hitTargets.has(target)) {
                 const distance = Phaser.Math.Distance.Between(startX, startY, target.x, target.y);
                 if (distance < 200 && distance < closestDistance) {
@@ -55,8 +60,10 @@ class ChainLightning extends Phaser.GameObjects.Sprite {
                 quantity: 3
             });
             
-            // Damage the target
-            closestTarget.takeDamage(this.damage);
+            // Damage the target (double-check validity)
+            if (closestTarget && closestTarget.active && closestTarget.scene) {
+                closestTarget.takeDamage(this.damage);
+            }
             
             // Remove visual after short time
             this.scene.time.delayedCall(120, () => {

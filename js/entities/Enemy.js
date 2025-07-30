@@ -310,6 +310,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     takeDamage(amount) {
+        // Check if enemy is still active and has a valid scene
+        if (!this.scene || !this.scene.time || !this.active) {
+            return;
+        }
+        
         this.health -= amount;
         this.health = Math.max(0, this.health);
         
@@ -350,6 +355,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     freeze(duration) {
+        // Check if enemy is still active and has a valid scene
+        if (!this.scene || !this.scene.time || !this.active) {
+            return;
+        }
+        
         this.frozen = true;
         this.freezeEndTime = this.scene.time.now + duration;
         this.setTint(0x88ddff);
@@ -375,10 +385,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                 onComplete: () => expText.destroy()
             });
             
-            // Chance to drop item (20% base chance + 5% per enemy level + world bonus)
+            // Chance to drop item (25% base chance + 3% per enemy level + world bonus)
             const worldLevel = this.scene.currentWorldLevel || 1;
-            const worldDropBonus = Math.min(0.1, (worldLevel - 1) * 0.015); // Max 10% bonus
-            const dropChance = 0.2 + (this.level * 0.05) + worldDropBonus;
+            const worldDropBonus = Math.min(0.08, (worldLevel - 1) * 0.01); // Max 8% bonus
+            const dropChance = 0.25 + (this.level * 0.03) + worldDropBonus;
             if (Math.random() < dropChance) {
                 this.dropItem();
             }
@@ -396,19 +406,24 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         const baseItemLevel = Math.max(1, this.level + Phaser.Math.Between(-1, 2));
         const worldScaledLevel = baseItemLevel + Math.floor((worldLevel - 1) * 0.3);
         
-        // Improved drop chances in higher worlds
-        const baseItemChance = 0.8;
-        const worldBonus = Math.min(0.15, (worldLevel - 1) * 0.02); // Max 15% bonus
-        const itemChance = Math.min(0.95, baseItemChance + worldBonus);
+        // Drop chances - make potions rare luxury items
+        const potionChance = 0.15; // Only 15% chance for potions
+        const worldBonus = Math.min(0.05, (worldLevel - 1) * 0.01); // Small world bonus for potions
+        const finalPotionChance = Math.min(0.25, potionChance + worldBonus); // Max 25% even in high worlds
         
         let item;
-        if (Math.random() < itemChance) {
-            // Higher worlds have better item quality chances
+        if (Math.random() < finalPotionChance) {
+            // Rare potion drop
+            const potionType = Math.random() < 0.6 ? 'health' : 'mana';
+            const potionLevel = Math.min(3, Math.max(1, worldScaledLevel)); // Lower level cap for potions
+            item = Item.createPotion(potionType, potionLevel);
+            
+            // Much smaller stack sizes - potions are precious
+            item.stackSize = Phaser.Math.Between(1, 2); // Only 1-2 potions per drop
+        } else {
+            // Equipment drop (85% of drops are equipment)
             const qualityBonus = Math.min(0.2, (worldLevel - 1) * 0.03);
             item = Item.generateRandomItem(worldScaledLevel, qualityBonus);
-        } else {
-            const potionType = Math.random() < 0.6 ? 'health' : 'mana';
-            item = Item.createPotion(potionType, worldScaledLevel);
         }
         
         // Create visual item drop
@@ -465,7 +480,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         
         switch (item.type) {
             case 'potion':
-                if (item.name === 'Health Potion') {
+                if (item.name.includes('Healing')) {
                     // Red bottle shape
                     graphics.fillStyle(0xcc0000, 1);
                     graphics.fillRoundedRect(-6*scale, -8*scale, 12*scale, 16*scale, 2*scale);
@@ -474,7 +489,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     // Cork/cap
                     graphics.fillStyle(0x8b4513, 1);
                     graphics.fillRect(-3*scale, -9*scale, 6*scale, 3*scale);
-                } else if (item.name === 'Mana Potion') {
+                } else if (item.name.includes('Mana')) {
                     // Blue bottle shape
                     graphics.fillStyle(0x0000cc, 1);
                     graphics.fillRoundedRect(-6*scale, -8*scale, 12*scale, 16*scale, 2*scale);
