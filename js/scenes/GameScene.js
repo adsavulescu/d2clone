@@ -2,11 +2,23 @@ class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
         this.currentWorldLevel = 1;
+        this.enemySpawner = null;
+        this.worldSpawns = null;
+        this.wallColliders = []; // Store wall collider references
+        this.isRecreatingUI = false; // Flag to prevent recursive UI recreation
+        this.needsEnemyHealthBarRecreation = false; // Flag to mark when enemy health bar needs recreation
     }
     
     create() {
         // Initialize transition flag
         this.isTransitioning = false;
+        
+        // Explicitly disable physics debug rendering
+        this.physics.world.drawDebug = false;
+        if (this.physics.world.debugGraphic) {
+            this.physics.world.debugGraphic.clear();
+            this.physics.world.debugGraphic.visible = false;
+        }
         
         // Initialize player statistics tracking
         this.gameStartTime = this.time.now;
@@ -31,7 +43,14 @@ class GameScene extends Phaser.Scene {
         // Initialize item drops group
         this.itemDrops = this.add.group();
         
-        this.spawnEnemies(35);
+        // Initialize enemy spawner
+        this.enemySpawner = new EnemySpawner(this);
+        
+        // Generate fixed spawn data for this world
+        this.worldSpawns = this.enemySpawner.generateWorldSpawns(this.currentWorldLevel);
+        
+        // Spawn initial enemies using new system
+        this.spawnInitialEnemies();
         
         this.setupCamera();
         this.setupControls();
@@ -43,18 +62,20 @@ class GameScene extends Phaser.Scene {
         // Enemies can collide with each other but not with player (so they can attack)
         this.physics.add.collider(this.enemies, this.enemies);
         
+        // Add wall collisions and store references
+        if (this.worldWalls && this.worldWalls.children) {
+            const playerWallCollider = this.physics.add.collider(this.player, this.worldWalls);
+            const enemyWallCollider = this.physics.add.collider(this.enemies, this.worldWalls);
+            this.wallColliders.push(playerWallCollider, enemyWallCollider);
+        }
+        
         // Item pickup collision
         this.physics.add.overlap(this.player, this.itemDrops, this.pickupItem, null, this);
         
         // Portal collision for world transition
         this.setupPortalCollision();
         
-        // Re-enable periodic enemy spawning with higher rate
-        this.enemySpawnTimer = this.time.addEvent({
-            delay: 6000, // Spawn every 6 seconds
-            callback: () => this.spawnEnemies(5), // Spawn 5 enemies at a time
-            loop: true
-        });
+        // No more periodic spawning - enemies are fixed per world
     }
     
     setupCamera() {
@@ -131,6 +152,7 @@ class GameScene extends Phaser.Scene {
     
     setupUI() {
         this.createInfoPanel();
+        this.createEnemyHealthBarUI();
     }
     
     
@@ -239,6 +261,84 @@ class GameScene extends Phaser.Scene {
     
     recreateUIElements() {
         this.createInfoPanelElements();
+        // Don't recreate enemy health bar UI here - it has its own recreation logic
+    }
+    
+    createEnemyHealthBarUI() {
+        // Prevent recursive recreation
+        if (this.isRecreatingUI) {
+            return;
+        }
+        this.isRecreatingUI = true;
+        
+        // Hide any existing health bar first
+        this.hideEnemyHealthBar();
+        
+        // Destroy existing elements first
+        if (this.enemyInfoBg && this.enemyInfoBg.destroy) {
+            this.enemyInfoBg.destroy();
+            this.enemyInfoBg = null;
+        }
+        if (this.enemyNameText && this.enemyNameText.destroy) {
+            this.enemyNameText.destroy();
+            this.enemyNameText = null;
+        }
+        if (this.enemyTypeText && this.enemyTypeText.destroy) {
+            this.enemyTypeText.destroy();
+            this.enemyTypeText = null;
+        }
+        if (this.enemyHealthBar && this.enemyHealthBar.destroy) {
+            this.enemyHealthBar.destroy();
+            this.enemyHealthBar = null;
+        }
+        
+        // Create container for enemy health bar at top of screen
+        const centerX = this.cameras.main.width / 2;
+        
+        // Background for enemy info
+        this.enemyInfoBg = this.add.graphics();
+        this.enemyInfoBg.setScrollFactor(0);
+        this.enemyInfoBg.setDepth(2000);
+        this.enemyInfoBg.setVisible(false);
+        
+        // Enemy name text - create with initial text to ensure proper initialization
+        this.enemyNameText = this.add.text(centerX, 20, ' ', {
+            fontSize: '18px',
+            fill: '#ffffff',
+            fontWeight: 'bold',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.enemyNameText.setOrigin(0.5);
+        this.enemyNameText.setScrollFactor(0);
+        this.enemyNameText.setDepth(2001);
+        this.enemyNameText.setVisible(false);
+        
+        // Enemy level/type text - create with initial text to ensure proper initialization
+        this.enemyTypeText = this.add.text(centerX, 40, ' ', {
+            fontSize: '14px',
+            fill: '#ffff00',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.enemyTypeText.setOrigin(0.5);
+        this.enemyTypeText.setScrollFactor(0);
+        this.enemyTypeText.setDepth(2001);
+        this.enemyTypeText.setVisible(false);
+        
+        // Health bar graphics
+        this.enemyHealthBar = this.add.graphics();
+        this.enemyHealthBar.setScrollFactor(0);
+        this.enemyHealthBar.setDepth(2001);
+        this.enemyHealthBar.setVisible(false);
+        
+        // Store current hovered enemy
+        this.hoveredEnemy = null;
+        
+        // Reset recreation flag with a small delay to ensure everything is initialized
+        this.time.delayedCall(100, () => {
+            this.isRecreatingUI = false;
+        });
     }
     
     generateWorld() {
@@ -247,15 +347,46 @@ class GameScene extends Phaser.Scene {
             this.worldTiles.destroy();
         }
         
+        // Clear existing walls and their colliders
+        if (this.worldWalls) {
+            // First remove all wall colliders
+            this.wallColliders.forEach(collider => {
+                if (collider && collider.destroy) {
+                    collider.destroy();
+                }
+            });
+            this.wallColliders = [];
+            
+            // Then destroy the wall group
+            this.worldWalls.clear(true, true);
+            this.worldWalls.destroy(true);
+            this.worldWalls = null;
+        }
+        
         this.worldGenerator = new WorldGenerator(this, 150, 150, 32, this.currentWorldLevel);
         this.worldTiles = this.worldGenerator.generate();
+        
+        // Get the wall collision group
+        this.worldWalls = this.worldGenerator.getWallGroup();
+        
+        // Add collisions with walls only if we have valid groups
+        if (this.worldWalls && this.worldWalls.children && this.player) {
+            const playerWallCollider = this.physics.add.collider(this.player, this.worldWalls);
+            this.wallColliders.push(playerWallCollider);
+        }
+        if (this.worldWalls && this.worldWalls.children && this.enemies) {
+            const enemyWallCollider = this.physics.add.collider(this.enemies, this.worldWalls);
+            this.wallColliders.push(enemyWallCollider);
+        }
     }
     
     cleanupCurrentWorld() {
-        // Stop and destroy enemy spawn timer
-        if (this.enemySpawnTimer) {
-            this.enemySpawnTimer.destroy();
-            this.enemySpawnTimer = null;
+        // Store player reference to preserve it
+        const playerRef = this.player;
+        
+        // Clean up enemy spawner
+        if (this.enemySpawner) {
+            this.enemySpawner.cleanupOldGroups();
         }
         
         // CRITICAL: Destroy all particles first - major source of accumulation
@@ -287,9 +418,10 @@ class GameScene extends Phaser.Scene {
         this.enemies.children.entries.forEach(enemy => {
             if (enemy && enemy.destroy) {
                 // Cleanup any enemy-specific timers or effects
-                if (enemy.healthBar) {
-                    enemy.healthBar.destroy();
-                }
+                // Health bar now handled by hover system
+                // if (enemy.healthBar) {
+                //     enemy.healthBar.destroy();
+                // }
                 enemy.destroy();
             }
         });
@@ -388,13 +520,7 @@ class GameScene extends Phaser.Scene {
         this.tweens.killAll();
         this.time.removeAllEvents();
         
-        // Recreate the enemy spawn timer immediately
-        this.enemySpawnTimer = this.time.addEvent({
-            delay: 6000,
-            callback: () => this.spawnEnemies(5),
-            loop: true,
-            paused: true // Start paused
-        });
+        // No enemy spawn timer needed with fixed spawns
         
         // Recreate physics groups (safer than nuclear reset)
         if (this.physics && this.physics.world) {
@@ -409,6 +535,9 @@ class GameScene extends Phaser.Scene {
             // Re-enable collisions
             this.physics.add.collider(this.enemies, this.enemies);
             this.physics.add.overlap(this.player, this.itemDrops, this.pickupItem, null, this);
+            
+            // Don't add wall collisions here - walls have been destroyed
+            // Wall collisions will be re-added after new world is generated
         }
         
         // Force multiple garbage collection hints
@@ -470,10 +599,7 @@ class GameScene extends Phaser.Scene {
             }
         ).setOrigin(0.5).setScrollFactor(0).setDepth(5000);
         
-        // Stop enemy spawning timer during transition
-        if (this.enemySpawnTimer) {
-            this.enemySpawnTimer.paused = true;
-        }
+        // No enemy spawning timer to pause
         
         // Fade transition
         this.cameras.main.fadeOut(1000, 0, 0, 0);
@@ -510,18 +636,26 @@ class GameScene extends Phaser.Scene {
                 
                 // Recreate UI elements to ensure they work properly
                 this.recreateUIElements();
+                this.createEnemyHealthBarUI();
+                
+                // Hide enemy health bar during transition
+                this.hideEnemyHealthBar();
                 
                 // Wait a moment before spawning enemies to ensure player is safe
                 this.time.delayedCall(500, () => {
                     // Setup new portal collision
                     this.setupPortalCollision();
                     
-                    // Spawn new enemies (scaled for world level)
-                    this.spawnEnemies(35);
+                    // Generate new fixed spawn data for this world
+                    this.worldSpawns = this.enemySpawner.generateWorldSpawns(this.currentWorldLevel);
                     
-                    // Resume the enemy spawning timer (it was recreated in cleanup)
-                    if (this.enemySpawnTimer) {
-                        this.enemySpawnTimer.paused = false;
+                    // Spawn initial enemies for new world
+                    this.spawnInitialEnemies();
+                    
+                    // Re-establish wall collisions for new enemies
+                    if (this.worldWalls && this.worldWalls.children && this.enemies) {
+                        const enemyWallCollider = this.physics.add.collider(this.enemies, this.worldWalls);
+                        this.wallColliders.push(enemyWallCollider);
                     }
                     
                     // Remove invulnerability after everything is set up
@@ -542,17 +676,15 @@ class GameScene extends Phaser.Scene {
         });
     }
     
-    spawnEnemies(count) {
-        const positions = this.worldGenerator.getSpawnablePositions(count);
+    spawnInitialEnemies() {
+        // Spawn all fixed enemies for this world
+        const spawned = this.enemySpawner.spawnWorldEnemies(
+            this.worldSpawns, 
+            this.player.level, 
+            this.currentWorldLevel
+        );
         
-        positions.forEach(pos => {
-            // Scale enemy level with world level and player level
-            const baseLevel = Math.max(1, this.player.level + Phaser.Math.Between(-1, 1));
-            const worldScaledLevel = baseLevel + Math.floor((this.currentWorldLevel - 1) * 0.5);
-            const enemy = new Enemy(this, pos.x, pos.y, worldScaledLevel);
-            enemy.playerRef = this.player; // Set player reference once at spawn
-            this.enemies.add(enemy);
-        });
+        console.log(`Spawned ${spawned} enemies for world ${this.currentWorldLevel}`);
     }
     
     update(time, delta) {
@@ -562,6 +694,9 @@ class GameScene extends Phaser.Scene {
         }
         
         this.player.update(this.playerTarget);
+        
+        // Update enemy hover detection
+        this.updateEnemyHover();
         
         
         // Update new UI system
@@ -589,12 +724,164 @@ class GameScene extends Phaser.Scene {
                 }
                 this.lastUIUpdate = time;
             } catch (error) {
-                // If text objects are corrupted, recreate them
-                console.warn('Text object error, recreating UI elements:', error);
-                this.recreateUIElements();
+                // If text objects are corrupted, recreate only info panel elements
+                console.warn('Text object error, recreating info panel elements:', error);
+                this.createInfoPanelElements();
             }
         }
         
+    }
+    
+    updateEnemyHover() {
+        // Skip if UI is being recreated
+        if (this.isRecreatingUI) {
+            return;
+        }
+        
+        // Get mouse position in world coordinates
+        const pointer = this.input.activePointer;
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        
+        // Find enemy under mouse
+        let enemyUnderMouse = null;
+        let closestDistance = Infinity;
+        
+        this.enemies.children.entries.forEach(enemy => {
+            if (enemy && enemy.active) {
+                const distance = Phaser.Math.Distance.Between(worldPoint.x, worldPoint.y, enemy.x, enemy.y);
+                // Check if mouse is over enemy (within sprite bounds)
+                if (distance < 20 && distance < closestDistance) {
+                    closestDistance = distance;
+                    enemyUnderMouse = enemy;
+                }
+            }
+        });
+        
+        // Update hovered enemy
+        if (enemyUnderMouse !== this.hoveredEnemy) {
+            this.hoveredEnemy = enemyUnderMouse;
+            
+            if (this.hoveredEnemy) {
+                this.showEnemyHealthBar(this.hoveredEnemy);
+            } else {
+                this.hideEnemyHealthBar();
+            }
+        } else if (this.hoveredEnemy) {
+            // Update health bar for current enemy
+            this.updateEnemyHealthBar(this.hoveredEnemy);
+        }
+    }
+    
+    showEnemyHealthBar(enemy) {
+        // Ensure UI is created
+        this.ensureEnemyHealthBarUI();
+        
+        // Check if UI elements exist before using them
+        if (!this.enemyInfoBg || !this.enemyNameText || !this.enemyTypeText || !this.enemyHealthBar) {
+            return;
+        }
+        
+        // Show all UI elements
+        this.enemyInfoBg.setVisible(true);
+        this.enemyNameText.setVisible(true);
+        this.enemyTypeText.setVisible(true);
+        this.enemyHealthBar.setVisible(true);
+        
+        // Update texts safely
+        const enemyName = enemy.isBoss ? enemy.bossName : 'Skeletal Warrior';
+        const typeText = enemy.isBoss ? `Level ${enemy.level} Boss` : `Level ${enemy.level}`;
+        
+        // Use a safe text update method
+        this.safeSetText(this.enemyNameText, enemyName);
+        this.safeSetText(this.enemyTypeText, typeText);
+        
+        // Update health bar
+        this.updateEnemyHealthBar(enemy);
+        
+        // Draw background
+        const centerX = this.cameras.main.width / 2;
+        if (this.enemyInfoBg && this.enemyInfoBg.clear) {
+            this.enemyInfoBg.clear();
+            this.enemyInfoBg.fillStyle(0x000000, 0.8);
+            this.enemyInfoBg.fillRect(centerX - 150, 10, 300, 60);
+            this.enemyInfoBg.lineStyle(2, enemy.isBoss ? 0xffd700 : 0x808080, 1);
+            this.enemyInfoBg.strokeRect(centerX - 150, 10, 300, 60);
+        }
+    }
+    
+    safeSetText(textObject, text) {
+        if (!textObject || !text) return;
+        
+        try {
+            // Check if the text object is in a valid state
+            if (textObject.texture && textObject.frame && textObject.setText) {
+                textObject.setText(text);
+            } else {
+                // Text object is invalid, mark for recreation
+                this.needsEnemyHealthBarRecreation = true;
+            }
+        } catch (error) {
+            // Silently handle error and mark for recreation
+            this.needsEnemyHealthBarRecreation = true;
+        }
+    }
+    
+    ensureEnemyHealthBarUI() {
+        // Check if we need to recreate the UI
+        if (this.needsEnemyHealthBarRecreation || !this.enemyNameText || !this.enemyTypeText) {
+            this.createEnemyHealthBarUI();
+            this.needsEnemyHealthBarRecreation = false;
+        }
+    }
+    
+    updateEnemyHealthBar(enemy) {
+        if (!enemy || !enemy.active) {
+            this.hideEnemyHealthBar();
+            return;
+        }
+        
+        // Check if health bar graphics exists
+        if (!this.enemyHealthBar || !this.enemyHealthBar.clear) {
+            return;
+        }
+        
+        const centerX = this.cameras.main.width / 2;
+        const barWidth = 250;
+        const barHeight = 8;
+        const barY = 50;
+        
+        this.enemyHealthBar.clear();
+        
+        // Background
+        this.enemyHealthBar.fillStyle(0x000000, 1);
+        this.enemyHealthBar.fillRect(centerX - barWidth/2, barY, barWidth, barHeight);
+        
+        // Border
+        this.enemyHealthBar.lineStyle(1, enemy.isBoss ? 0xffd700 : 0x808080, 1);
+        this.enemyHealthBar.strokeRect(centerX - barWidth/2, barY, barWidth, barHeight);
+        
+        // Health fill
+        const healthPercent = Math.max(0, enemy.health / enemy.maxHealth);
+        if (healthPercent > 0) {
+            this.enemyHealthBar.fillStyle(0xff0000, 1);
+            this.enemyHealthBar.fillRect(centerX - barWidth/2 + 1, barY + 1, (barWidth - 2) * healthPercent, barHeight - 2);
+        }
+    }
+    
+    hideEnemyHealthBar() {
+        if (this.enemyInfoBg && this.enemyInfoBg.setVisible) {
+            this.enemyInfoBg.setVisible(false);
+        }
+        if (this.enemyNameText && this.enemyNameText.setVisible) {
+            this.enemyNameText.setVisible(false);
+        }
+        if (this.enemyTypeText && this.enemyTypeText.setVisible) {
+            this.enemyTypeText.setVisible(false);
+        }
+        if (this.enemyHealthBar && this.enemyHealthBar.setVisible) {
+            this.enemyHealthBar.setVisible(false);
+        }
+        this.hoveredEnemy = null;
     }
     
     pickupItem(player, itemSprite) {
@@ -682,7 +969,7 @@ class GameScene extends Phaser.Scene {
     }
     
     gameOver() {
-        this.enemySpawnTimer.remove();
+        // No enemy spawn timer to remove with fixed spawns
         
         // Calculate play time
         const playTime = this.time.now - this.gameStartTime;

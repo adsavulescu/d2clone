@@ -44,9 +44,9 @@ class ChainLightning extends Phaser.GameObjects.Sprite {
         if (closestTarget) {
             this.hitTargets.add(closestTarget);
             
-            // Create lightning bolt visual effect
+            // Create lightning bolt visual effect (scaled up for 3x sprites)
             const lightning = this.scene.add.graphics();
-            lightning.lineStyle(3, 0x88ddff, 1);
+            lightning.lineStyle(6, 0x88ddff, 1); // Thicker line for 3x scale
             lightning.lineBetween(startX, startY, closestTarget.x, closestTarget.y);
             lightning.setDepth(100);
             
@@ -54,7 +54,7 @@ class ChainLightning extends Phaser.GameObjects.Sprite {
             const crackle = this.scene.add.particles(closestTarget.x, closestTarget.y, 'fireball', {
                 tint: 0xaaffff,
                 speed: { min: 80, max: 120 },
-                scale: { start: 0.3, end: 0 },
+                scale: { start: 0.15, end: 0 }, // Reduced scale since fireball sprite is 3x larger
                 blendMode: 'ADD',
                 lifespan: 120,
                 quantity: 3

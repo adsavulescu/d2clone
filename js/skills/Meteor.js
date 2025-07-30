@@ -12,7 +12,7 @@ class Meteor extends Phaser.GameObjects.Sprite {
         
         // Set initial position high above target
         this.setPosition(targetX, targetY - 400);
-        this.setScale(0.5);
+        this.setScale(0.3); // Reduced scale since meteor sprite is 3x larger
         this.setAlpha(0.8);
         this.setDepth(1000);
         
@@ -38,8 +38,8 @@ class Meteor extends Phaser.GameObjects.Sprite {
             targets: this,
             x: targetX,
             y: targetY,
-            scaleX: 1.5,
-            scaleY: 1.5,
+            scaleX: 0.8, // Reduced scale since meteor sprite is 3x larger
+            scaleY: 0.8,
             duration: this.fallDuration,
             ease: 'Cubic.easeIn',
             onComplete: () => {
@@ -50,7 +50,7 @@ class Meteor extends Phaser.GameObjects.Sprite {
         // Fire trail particles during fall
         const fireTrail = scene.add.particles(0, 0, 'fireball', {
             speed: { min: 30, max: 80 },
-            scale: { start: 0.6, end: 0 },
+            scale: { start: 0.3, end: 0 }, // Reduced scale since fireball sprite is 3x larger
             tint: [0xff6600, 0xff3300, 0xffaa00],
             lifespan: 400,
             quantity: 2,
@@ -75,7 +75,7 @@ class Meteor extends Phaser.GameObjects.Sprite {
         // Create massive explosion effect
         const explosion = this.scene.add.particles(this.targetX, this.targetY, 'fireball', {
             speed: { min: 100, max: 300 },
-            scale: { start: 1.2, end: 0 },
+            scale: { start: 0.6, end: 0 }, // Reduced scale since fireball sprite is 3x larger
             tint: [0xff6600, 0xff3300, 0xffaa00, 0xff0000],
             blendMode: 'ADD',
             lifespan: 600,

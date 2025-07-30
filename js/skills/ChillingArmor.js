@@ -11,7 +11,7 @@ class ChillingArmor extends Phaser.GameObjects.Sprite {
         this.chillRadius = 80;
         
         this.setAlpha(0.5);
-        this.setScale(1.2);
+        this.setScale(0.4); // Reduced scale since frost sprite is 3x larger
         this.setTint(0x88ddff);
         this.setDepth(player.depth - 1);
         
@@ -38,7 +38,7 @@ class ChillingArmor extends Phaser.GameObjects.Sprite {
         this.scene.tweens.add({
             targets: this,
             alpha: 0.3,
-            scale: 1.4,
+            scale: 0.47, // Reduced scale since frost sprite is 3x larger
             duration: 2000,
             yoyo: true,
             repeat: -1,

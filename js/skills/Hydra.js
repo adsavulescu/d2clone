@@ -160,6 +160,7 @@ class Hydra extends Phaser.GameObjects.Sprite {
                 this.headParticles.push(particles);
             });
         }
+    }
     
     startAttacking() {
         this.attackTimer = this.scene.time.addEvent({
@@ -265,6 +266,13 @@ class HydraFireball extends Phaser.Physics.Arcade.Sprite {
             enemy.takeDamage(this.damage);
             this.explode();
         });
+        
+        // Add wall collision
+        if (scene.worldWalls) {
+            scene.physics.add.collider(this, scene.worldWalls, () => {
+                this.explode();
+            });
+        }
     }
     
     explode() {

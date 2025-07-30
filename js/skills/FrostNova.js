@@ -9,7 +9,7 @@ class FrostNova extends Phaser.GameObjects.Sprite {
         
         scene.tweens.add({
             targets: this,
-            scale: radius * 2 / 128,
+            scale: radius * 2 / 384, // Updated for 3x larger sprite (384px)
             alpha: 0.3,
             duration: 300,
             ease: 'Power2',
@@ -35,7 +35,7 @@ class FrostNova extends Phaser.GameObjects.Sprite {
         const particles = scene.add.particles(x, y, 'fireball', {
             tint: 0x88ddff,
             speed: { min: 50, max: 150 },
-            scale: { start: 0.8, end: 0 },
+            scale: { start: 0.4, end: 0 }, // Reduced scale since fireball sprite is 3x larger
             blendMode: 'ADD',
             lifespan: 350,
             quantity: 10,

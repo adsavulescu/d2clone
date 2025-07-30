@@ -10,7 +10,7 @@ class EnergyShield extends Phaser.GameObjects.Sprite {
         this.startTime = scene.time.now;
         
         this.setAlpha(0.4);
-        this.setScale(1.5);
+        this.setScale(0.5); // Reduced scale since frost sprite is 3x larger
         this.setTint(0x4488ff);
         this.setDepth(player.depth + 1);
         

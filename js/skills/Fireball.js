@@ -8,6 +8,9 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
         this.damage = damage;
         this.speed = 400;
         
+        // Scale down the fireball sprite since it's 3x larger
+        this.setScale(0.5);
+        
         const angle = Phaser.Math.Angle.Between(x, y, targetX, targetY);
         this.setVelocity(
             Math.cos(angle) * this.speed,
@@ -22,7 +25,7 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
         
         const particles = scene.add.particles(0, 0, 'fireball', {
             speed: { min: 50, max: 150 },
-            scale: { start: 0.5, end: 0 },
+            scale: { start: 0.3, end: 0 }, // Reduced scale since fireball sprite is 3x larger
             blendMode: 'ADD',
             lifespan: 300,
             quantity: 1,
@@ -42,12 +45,19 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
             enemy.takeDamage(this.damage);
             this.explode();
         });
+        
+        // Add wall collision
+        if (scene.worldWalls) {
+            scene.physics.add.collider(this, scene.worldWalls, () => {
+                this.explode();
+            });
+        }
     }
     
     explode() {
         const explosion = this.scene.add.particles(this.x, this.y, 'fireball', {
             speed: { min: 100, max: 200 },
-            scale: { start: 1, end: 0 },
+            scale: { start: 0.5, end: 0 }, // Reduced scale since fireball sprite is 3x larger
             blendMode: 'ADD',
             lifespan: 200,
             quantity: 6

@@ -9,6 +9,9 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
         this.speed = 300;
         this.accuracy = accuracy;
         
+        // Scale down the ice bolt sprite since it's 3x larger
+        this.setScale(0.5);
+        
         // Apply accuracy - higher dexterity means better accuracy
         const accuracyFactor = Math.min(accuracy / 100, 1.0); // Cap at 100% accuracy
         const maxDeviation = (1 - accuracyFactor) * 50; // Max 50 pixel deviation at 0 accuracy
@@ -35,7 +38,7 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
         // Ice trail particles
         const trail = scene.add.particles(0, 0, 'frost', {
             speed: { min: 20, max: 60 },
-            scale: { start: 0.3, end: 0 },
+            scale: { start: 0.1, end: 0 }, // Reduced scale since frost sprite is 3x larger
             tint: 0xccffff,
             lifespan: 300,
             quantity: 1,
@@ -56,6 +59,13 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
             enemy.freeze(1500); // Shorter freeze than Frost Nova
             this.shatter();
         });
+        
+        // Add wall collision
+        if (scene.worldWalls) {
+            scene.physics.add.collider(this, scene.worldWalls, () => {
+                this.shatter();
+            });
+        }
     }
     
     shatter() {

@@ -6,8 +6,17 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         
         this.setCollideWorldBounds(true);
-        this.setScale(1);
+        this.setScale(1); // Keep scale at 1 since sprites are already 3x larger
         this.setDepth(200); // Ensure player is above everything including town hall
+        
+        // Update physics body for 3x larger sprites (96x96)
+        this.body.setSize(48, 48); // Collision box slightly smaller than sprite
+        this.body.setOffset(24, 24); // Center the collision box
+        
+        // Disable debug display for this body
+        this.body.debugShowBody = false;
+        this.body.debugShowVelocity = false;
+        this.body.debugBodyColor = 0x000000;
         
         // Movement direction tracking
         this.currentDirection = 'down';
@@ -426,43 +435,33 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     }
     
     setupAnimations() {
-        // Create animations for different directions
-        if (!this.scene.anims.exists('sorcerer_walk_down')) {
-            this.scene.anims.create({
-                key: 'sorcerer_walk_down',
-                frames: [{ key: 'sorcerer_down' }],
-                frameRate: 8,
-                repeat: -1
-            });
-        }
+        // Create animations for all 8 directions
+        const directions = ['down', 'up', 'left', 'right', 'downleft', 'downright', 'upleft', 'upright'];
         
-        if (!this.scene.anims.exists('sorcerer_walk_up')) {
-            this.scene.anims.create({
-                key: 'sorcerer_walk_up',
-                frames: [{ key: 'sorcerer_up' }],
-                frameRate: 8,
-                repeat: -1
-            });
-        }
+        directions.forEach(dir => {
+            if (!this.scene.anims.exists(`sorcerer_walk_${dir}`)) {
+                this.scene.anims.create({
+                    key: `sorcerer_walk_${dir}`,
+                    frames: [{ key: `sorcerer_${dir}` }],
+                    frameRate: 8,
+                    repeat: -1
+                });
+            }
+        });
         
-        if (!this.scene.anims.exists('sorcerer_walk_left')) {
-            this.scene.anims.create({
-                key: 'sorcerer_walk_left',
-                frames: [{ key: 'sorcerer_left' }],
-                frameRate: 8,
-                repeat: -1
-            });
-        }
+        // Create idle animations for all directions
+        directions.forEach(dir => {
+            if (!this.scene.anims.exists(`sorcerer_idle_${dir}`)) {
+                this.scene.anims.create({
+                    key: `sorcerer_idle_${dir}`,
+                    frames: [{ key: `sorcerer_${dir}` }],
+                    frameRate: 1,
+                    repeat: 0
+                });
+            }
+        });
         
-        if (!this.scene.anims.exists('sorcerer_walk_right')) {
-            this.scene.anims.create({
-                key: 'sorcerer_walk_right',
-                frames: [{ key: 'sorcerer_right' }],
-                frameRate: 8,
-                repeat: -1
-            });
-        }
-        
+        // Default idle animation
         if (!this.scene.anims.exists('sorcerer_idle')) {
             this.scene.anims.create({
                 key: 'sorcerer_idle',
@@ -742,13 +741,27 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         if (isMoving) {
             let newDirection = this.currentDirection;
             
-            // Determine primary direction based on velocity
-            if (Math.abs(velocityX) > Math.abs(velocityY)) {
-                // Horizontal movement is primary
-                newDirection = velocityX > 0 ? 'right' : 'left';
-            } else {
-                // Vertical movement is primary  
-                newDirection = velocityY > 0 ? 'down' : 'up';
+            // Calculate angle to determine 8-directional movement
+            const angle = Math.atan2(velocityY, velocityX);
+            const degreeAngle = (angle * 180 / Math.PI + 360) % 360;
+            
+            // Determine direction based on angle (8 directions)
+            if (degreeAngle >= 337.5 || degreeAngle < 22.5) {
+                newDirection = 'right';
+            } else if (degreeAngle >= 22.5 && degreeAngle < 67.5) {
+                newDirection = 'downright';
+            } else if (degreeAngle >= 67.5 && degreeAngle < 112.5) {
+                newDirection = 'down';
+            } else if (degreeAngle >= 112.5 && degreeAngle < 157.5) {
+                newDirection = 'downleft';
+            } else if (degreeAngle >= 157.5 && degreeAngle < 202.5) {
+                newDirection = 'left';
+            } else if (degreeAngle >= 202.5 && degreeAngle < 247.5) {
+                newDirection = 'upleft';
+            } else if (degreeAngle >= 247.5 && degreeAngle < 292.5) {
+                newDirection = 'up';
+            } else if (degreeAngle >= 292.5 && degreeAngle < 337.5) {
+                newDirection = 'upright';
             }
             
             // Update direction and animation if changed
@@ -760,9 +773,10 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 this.play(`sorcerer_walk_${newDirection}`);
             }
         } else {
-            // Player stopped moving - play idle animation
-            if (this.anims.currentAnim && this.anims.currentAnim.key !== 'sorcerer_idle') {
-                this.play('sorcerer_idle');
+            // Player stopped moving - play idle animation for current direction
+            const idleKey = `sorcerer_idle_${this.currentDirection}`;
+            if (this.anims.currentAnim && this.anims.currentAnim.key !== idleKey) {
+                this.play(idleKey);
             }
         }
         
@@ -974,11 +988,20 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         const skill = this.skills.thunderStorm;
         const currentTime = this.scene.time.now;
         
-        if (skill.level === 0) return false;
-        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        if (skill.level === 0) {
+            this.showSkillMessage("Thunder Storm not learned!", 0xff4444);
+            return false;
+        }
+        if (currentTime - skill.lastUsed < skill.cooldown) {
+            this.showSkillMessage("Thunder Storm on cooldown!", 0xffaa00);
+            return false;
+        }
         
         const manaCost = this.getSkillManaCost('thunderStorm');
-        if (this.mana < manaCost) return false;
+        if (this.mana < manaCost) {
+            this.showSkillMessage("Not enough mana!", 0x4444ff);
+            return false;
+        }
         
         skill.lastUsed = currentTime;
         this.mana -= manaCost;
@@ -991,15 +1014,42 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         return true;
     }
     
+    showSkillMessage(message, color = 0xffffff) {
+        const messageText = this.scene.add.text(this.x, this.y - 30, message, {
+            fontSize: '14px',
+            fill: `#${color.toString(16).padStart(6, '0')}`,
+            fontWeight: 'bold',
+            stroke: '#000000',
+            strokeThickness: 1
+        }).setOrigin(0.5).setDepth(1000);
+        
+        this.scene.tweens.add({
+            targets: messageText,
+            y: messageText.y - 40,
+            alpha: 0,
+            duration: 2000,
+            onComplete: () => messageText.destroy()
+        });
+    }
+    
     castChillingArmor() {
         const skill = this.skills.chillingArmor;
         const currentTime = this.scene.time.now;
         
-        if (skill.level === 0) return false;
-        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        if (skill.level === 0) {
+            this.showSkillMessage("Chilling Armor not learned!", 0xff4444);
+            return false;
+        }
+        if (currentTime - skill.lastUsed < skill.cooldown) {
+            this.showSkillMessage("Chilling Armor on cooldown!", 0xffaa00);
+            return false;
+        }
         
         const manaCost = this.getSkillManaCost('chillingArmor');
-        if (this.mana < manaCost) return false;
+        if (this.mana < manaCost) {
+            this.showSkillMessage("Not enough mana!", 0x4444ff);
+            return false;
+        }
         
         skill.lastUsed = currentTime;
         this.mana -= manaCost;

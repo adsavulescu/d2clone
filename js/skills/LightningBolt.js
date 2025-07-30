@@ -36,6 +36,13 @@ class LightningBolt extends Phaser.Physics.Arcade.Sprite {
             
             this.hitEnemy(enemy);
         });
+        
+        // Add wall collision
+        if (scene.worldWalls) {
+            scene.physics.add.collider(this, scene.worldWalls, () => {
+                this.destroy();
+            });
+        }
     }
     
     createLightningTrail() {
