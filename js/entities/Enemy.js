@@ -277,35 +277,45 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             player.takeDamage(this.damage);
             this.lastAttack = time;
             
-            // Visual attack effect
-            this.scene.tweens.add({
-                targets: this,
-                scale: 1.3,
-                duration: 150,
-                yoyo: true,
-                ease: 'Power2'
-            });
+            // Visual attack effect - only if scene is still valid
+            if (this.scene && this.scene.tweens) {
+                this.scene.tweens.add({
+                    targets: this,
+                    scale: 1.3,
+                    duration: 150,
+                    yoyo: true,
+                    ease: 'Power2'
+                });
+            }
             
             // Flash red when attacking
             this.setTint(0xff4444);
-            this.scene.time.delayedCall(200, () => {
-                if (this.active) {
-                    this.clearTint();
+            if (this.scene && this.scene.time) {
+                this.scene.time.delayedCall(200, () => {
+                    if (this.active) {
+                        this.clearTint();
+                    }
+                });
+            }
+            
+            // Attack particles (optimized) - only if scene is still valid
+            if (this.scene && this.scene.add) {
+                const attackEffect = this.scene.add.particles(this.x, this.y, 'enemy', {
+                    speed: { min: 80, max: 120 },
+                    scale: { start: 0.8, end: 0 },
+                    tint: 0xff4444,
+                    lifespan: 200,
+                    quantity: 3
+                });
+                
+                if (this.scene.time) {
+                    this.scene.time.delayedCall(200, () => {
+                        if (attackEffect && attackEffect.destroy) {
+                            attackEffect.destroy();
+                        }
+                    });
                 }
-            });
-            
-            // Attack particles (optimized)
-            const attackEffect = this.scene.add.particles(this.x, this.y, 'enemy', {
-                speed: { min: 80, max: 120 },
-                scale: { start: 0.8, end: 0 },
-                tint: 0xff4444,
-                lifespan: 200,
-                quantity: 3
-            });
-            
-            this.scene.time.delayedCall(200, () => {
-                attackEffect.destroy();
-            });
+            }
         }
     }
     
@@ -341,13 +351,15 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             
         }
         
-        this.scene.tweens.add({
-            targets: this,
-            alpha: 0.5,
-            duration: 100,
-            yoyo: true,
-            repeat: 2
-        });
+        if (this.scene && this.scene.tweens) {
+            this.scene.tweens.add({
+                targets: this,
+                alpha: 0.5,
+                duration: 100,
+                yoyo: true,
+                repeat: 2
+            });
+        }
         
         if (this.health <= 0) {
             this.destroy();
@@ -367,34 +379,53 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     
     destroy() {
         // Drop experience and possibly items only if not during world transition
-        if (this.scene.player && this.scene.player.active && !this.scene.isTransitioning) {
+        // Add robust null checking to prevent errors during scene transitions
+        if (this.scene && this.scene.player && this.scene.player.active && !this.scene.isTransitioning) {
             this.scene.player.gainExperience(this.experienceReward);
             
-            // Show experience gain
-            const expText = this.scene.add.text(this.x, this.y - 30, `+${this.experienceReward} XP`, {
-                fontSize: '12px',
-                fill: '#00ff00',
-                fontWeight: 'bold'
-            }).setOrigin(0.5).setDepth(1000);
+            // Track enemy kill for statistics
+            if (this.scene.playerStats) {
+                this.scene.playerStats.enemiesKilled++;
+            }
             
-            this.scene.tweens.add({
-                targets: expText,
-                y: expText.y - 30,
-                alpha: 0,
-                duration: 1500,
-                onComplete: () => expText.destroy()
-            });
+            // Show experience gain - only if scene is still active
+            if (this.scene.add && this.scene.tweens) {
+                const expText = this.scene.add.text(this.x, this.y - 30, `+${this.experienceReward} XP`, {
+                    fontSize: '12px',
+                    fill: '#00ff00',
+                    fontWeight: 'bold'
+                }).setOrigin(0.5).setDepth(1000);
+                
+                this.scene.tweens.add({
+                    targets: expText,
+                    y: expText.y - 30,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: () => {
+                        if (expText && expText.destroy) {
+                            expText.destroy();
+                        }
+                    }
+                });
+            }
             
             // Chance to drop item (25% base chance + 3% per enemy level + world bonus)
             const worldLevel = this.scene.currentWorldLevel || 1;
             const worldDropBonus = Math.min(0.08, (worldLevel - 1) * 0.01); // Max 8% bonus
             const dropChance = 0.25 + (this.level * 0.03) + worldDropBonus;
             if (Math.random() < dropChance) {
-                this.dropItem();
+                try {
+                    this.dropItem();
+                } catch (error) {
+                    // Silently handle errors during scene transitions
+                    console.warn('Error dropping item during scene transition:', error);
+                }
             }
         }
         
-        if (this.healthBar) this.healthBar.destroy();
+        if (this.healthBar && this.healthBar.destroy) {
+            this.healthBar.destroy();
+        }
         super.destroy();
     }
     
@@ -431,6 +462,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     createItemDrop(item) {
+        // Ensure scene is still valid before creating item drop
+        if (!this.scene || !this.scene.add) {
+            return;
+        }
+        
         // Create visual representation of the dropped item using proper icons
         const itemSprite = this.scene.add.graphics();
         itemSprite.x = this.x;

@@ -80,7 +80,7 @@ class UIManager {
         const barWidth = 400;
         const barHeight = 20;
         const barX = (this.scene.cameras.main.width - barWidth) / 2;
-        const barY = 10;
+        const barY = this.scene.cameras.main.height - 50; // Move up slightly for better alignment
         
         // Experience bar background
         this.expBarBg = this.scene.add.graphics();
@@ -101,12 +101,6 @@ class UIManager {
             fontWeight: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
         
-        // Level text
-        this.levelText = this.scene.add.text(barX - 50, barY + barHeight/2, '', {
-            fontSize: '14px',
-            fill: '#ffff00',
-            fontWeight: 'bold'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
     }
     
     createHealthManaGlobes() {
@@ -178,7 +172,7 @@ class UIManager {
         const slotSize = 40;
         const slotSpacing = 45;
         const hotbarX = 150; // Moved right to avoid overlapping health orb
-        const hotbarY = this.scene.cameras.main.height - 100;
+        const hotbarY = this.scene.cameras.main.height - 80; // Moved down closer to bottom
         
         // Background for potion hotbar
         const bgWidth = 2 * slotSpacing + 20;
@@ -378,7 +372,7 @@ class UIManager {
         const barWidth = 400;
         const barHeight = 20;
         const barX = (this.scene.cameras.main.width - barWidth) / 2;
-        const barY = 10;
+        const barY = this.scene.cameras.main.height - 50; // Move up slightly to match createExperienceBar
         
         const expPercent = this.player.experience / this.player.experienceToNext;
         
@@ -387,7 +381,6 @@ class UIManager {
         this.expBar.fillRect(barX + 2, barY + 2, (barWidth - 4) * expPercent, barHeight - 4);
         
         this.expText.setText(`${this.player.experience} / ${this.player.experienceToNext}`);
-        this.levelText.setText(`Level ${this.player.level}`);
     }
     
     updateHealthManaGlobes() {
@@ -818,6 +811,163 @@ class UIManager {
                     graphics.fillCircle(0, 0, 12);
                 }
                 break;
+            case 'lightningBolt':
+                graphics.lineStyle(4, 0xffffaa, alpha);
+                graphics.moveTo(-8, -10);
+                graphics.lineTo(0, 0);
+                graphics.lineTo(8, -10);
+                graphics.strokePath();
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 12);
+                }
+                break;
+            case 'blizzard':
+                graphics.fillStyle(0x88ddff, alpha * 0.7);
+                graphics.fillCircle(0, 0, 12);
+                graphics.fillStyle(0xffffff, alpha);
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2;
+                    const x = Math.cos(angle) * 8;
+                    const y = Math.sin(angle) * 8;
+                    graphics.fillCircle(x, y, 2);
+                }
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 15);
+                }
+                break;
+            case 'hydra':
+                graphics.fillStyle(0xff4400, alpha);
+                graphics.fillEllipse(0, 0, 16, 20);
+                graphics.fillStyle(0xff8800, alpha);
+                graphics.fillTriangle(-6, -8, 6, -8, 0, -12);
+                graphics.fillTriangle(-4, -4, 4, -4, 0, -8);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 12);
+                }
+                break;
+            case 'energyShield':
+                graphics.lineStyle(3, 0x4488ff, alpha);
+                graphics.strokeCircle(0, 0, 10);
+                graphics.fillStyle(0x4488ff, alpha * 0.3);
+                graphics.fillCircle(0, 0, 10);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 12);
+                }
+                break;
+            case 'thunderStorm':
+                graphics.fillStyle(0x333366, alpha * 0.5);
+                graphics.fillCircle(0, -5, 12);
+                graphics.lineStyle(2, 0xffffaa, alpha);
+                graphics.moveTo(-4, 2);
+                graphics.lineTo(0, 8);
+                graphics.lineTo(4, 2);
+                graphics.strokePath();
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 12);
+                }
+                break;
+            case 'chillingArmor':
+                graphics.fillStyle(0x88ddff, alpha * 0.4);
+                graphics.fillCircle(0, 0, 12);
+                graphics.lineStyle(2, 0x88ddff, alpha);
+                graphics.strokeCircle(0, 0, 8);
+                graphics.strokeCircle(0, 0, 12);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 15);
+                }
+                break;
+            // Passive skills
+            case 'warmth':
+                graphics.fillStyle(0xff8844, alpha * 0.6);
+                graphics.fillCircle(0, 0, 10);
+                graphics.fillStyle(0xffaa44, alpha);
+                graphics.fillCircle(0, 0, 6);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 12);
+                }
+                break;
+            case 'staticField':
+                graphics.lineStyle(2, 0xaaffff, alpha);
+                graphics.strokeCircle(0, 0, 8);
+                graphics.moveTo(-6, 0);
+                graphics.lineTo(6, 0);
+                graphics.moveTo(0, -6);
+                graphics.lineTo(0, 6);
+                graphics.strokePath();
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 10);
+                }
+                break;
+            case 'fireResistance':
+                graphics.fillStyle(0xff4444, alpha * 0.7);
+                graphics.fillRect(-8, -8, 16, 16);
+                graphics.fillStyle(0xffffff, alpha);
+                graphics.fillRect(-6, -1, 12, 2);
+                graphics.fillRect(-1, -6, 2, 12);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillRect(-10, -10, 20, 20);
+                }
+                break;
+            case 'coldResistance':
+                graphics.fillStyle(0x4488ff, alpha * 0.7);
+                graphics.fillRect(-8, -8, 16, 16);
+                graphics.fillStyle(0xffffff, alpha);
+                graphics.fillRect(-6, -1, 12, 2);
+                graphics.fillRect(-1, -6, 2, 12);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillRect(-10, -10, 20, 20);
+                }
+                break;
+            case 'lightningResistance':
+                graphics.fillStyle(0xffff44, alpha * 0.7);
+                graphics.fillRect(-8, -8, 16, 16);
+                graphics.fillStyle(0xffffff, alpha);
+                graphics.fillRect(-6, -1, 12, 2);
+                graphics.fillRect(-1, -6, 2, 12);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillRect(-10, -10, 20, 20);
+                }
+                break;
+            case 'mastery':
+                graphics.fillStyle(0x8844ff, alpha * 0.7);
+                graphics.fillCircle(0, 0, 10);
+                graphics.fillStyle(0xffffff, alpha);
+                // Draw a star manually since fillStar doesn't exist
+                const starPoints = [];
+                for (let i = 0; i < 5; i++) {
+                    const outerAngle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+                    const innerAngle = ((i + 0.5) * Math.PI * 2) / 5 - Math.PI / 2;
+                    starPoints.push(Math.cos(outerAngle) * 8, Math.sin(outerAngle) * 8);
+                    starPoints.push(Math.cos(innerAngle) * 4, Math.sin(innerAngle) * 4);
+                }
+                graphics.fillPoints(starPoints, true);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillCircle(0, 0, 12);
+                }
+                break;
+            default:
+                // Generic skill icon for unknown skills
+                graphics.fillStyle(0x666666, alpha);
+                graphics.fillRect(-8, -8, 16, 16);
+                graphics.fillStyle(0x999999, alpha);
+                graphics.fillRect(-6, -6, 12, 12);
+                if (grayed) {
+                    graphics.fillStyle(0x333333, 0.6);
+                    graphics.fillRect(-10, -10, 20, 20);
+                }
+                break;
         }
     }
     
@@ -928,6 +1078,18 @@ class UIManager {
             this.player.castIceBolt(worldPoint.x, worldPoint.y);
         } else if (hotbarItem.name === 'meteor') {
             this.player.castMeteor(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'lightningBolt') {
+            this.player.castLightningBolt(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'blizzard') {
+            this.player.castBlizzard(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'hydra') {
+            this.player.castHydra(worldPoint.x, worldPoint.y);
+        } else if (hotbarItem.name === 'energyShield') {
+            this.player.castEnergyShield();
+        } else if (hotbarItem.name === 'thunderStorm') {
+            this.player.castThunderStorm();
+        } else if (hotbarItem.name === 'chillingArmor') {
+            this.player.castChillingArmor();
         }
     }
     
@@ -961,6 +1123,18 @@ class UIManager {
                 this.player.castIceBolt(worldPoint.x, worldPoint.y);
             } else if (hotbarItem.name === 'meteor') {
                 this.player.castMeteor(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'lightningBolt') {
+                this.player.castLightningBolt(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'blizzard') {
+                this.player.castBlizzard(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'hydra') {
+                this.player.castHydra(worldPoint.x, worldPoint.y);
+            } else if (hotbarItem.name === 'energyShield') {
+                this.player.castEnergyShield();
+            } else if (hotbarItem.name === 'thunderStorm') {
+                this.player.castThunderStorm();
+            } else if (hotbarItem.name === 'chillingArmor') {
+                this.player.castChillingArmor();
             }
         }
     }
@@ -1606,11 +1780,32 @@ class UIManager {
         this.skillTreeOpen = false;
         if (this.skillTreePanelElements) {
             this.skillTreePanelElements.forEach(element => {
-                if (element && element.destroy) {
-                    element.destroy();
+                try {
+                    if (element && element.destroy) {
+                        element.destroy();
+                    }
+                } catch (error) {
+                    console.warn('Error destroying skill tree element:', error);
                 }
             });
             this.skillTreePanelElements = [];
+        }
+        
+        // Additional cleanup: destroy any lingering graphics objects
+        if (this.scene && this.scene.children && this.scene.children.list) {
+            const lingering = this.scene.children.list.filter(child => 
+                child.depth >= 2000 && child.depth <= 2010 && 
+                child.scrollFactorX === 0 && child.scrollFactorY === 0
+            );
+            lingering.forEach(child => {
+                try {
+                    if (child && child.destroy) {
+                        child.destroy();
+                    }
+                } catch (error) {
+                    console.warn('Error destroying lingering element:', error);
+                }
+            });
         }
     }
     
@@ -1697,23 +1892,8 @@ class UIManager {
         const skillSpacing = 60;
         const skillsPerRow = 10;
         
-        // Define skill categories (only implemented skills)
-        const skillCategories = {
-            offensive: [
-                { name: 'fireball', display: 'Fireball', gridPos: [0, 0] },
-                { name: 'frostNova', display: 'Frost Nova', gridPos: [1, 0] },
-                { name: 'chainLightning', display: 'Chain Lightning', gridPos: [2, 0] },
-                { name: 'iceBolt', display: 'Ice Bolt', gridPos: [0, 1] },
-                { name: 'meteor', display: 'Meteor', gridPos: [1, 1] }
-            ],
-            defensive: [
-                { name: 'teleport', display: 'Teleport', gridPos: [0, 0] }
-            ],
-            passive: [
-                // No passive skills implemented yet
-            ]
-        };
-        
+        // Dynamically get skills based on current tab from player
+        const skillCategories = this.getSkillsByTab();
         const currentSkills = skillCategories[this.currentSkillTab] || [];
         
         // Display available skill points
@@ -1724,6 +1904,7 @@ class UIManager {
             fontWeight: 'bold'
         }).setScrollFactor(0).setDepth(2001);
         this.skillTreePanelElements.push(skillPointsText);
+        
         
         // Create skill grid
         currentSkills.forEach(skillData => {
@@ -1790,7 +1971,11 @@ class UIManager {
                 // Show tooltip
                 let tooltipText = skillData.display;
                 if (skill) {
-                    tooltipText += `\nLevel: ${skill.level}/${skill.maxLevel}`;
+                    // Add skill description
+                    if (skill.description) {
+                        tooltipText += `\n"${skill.description}"`;
+                    }
+                    tooltipText += `\n\nLevel: ${skill.level}/${skill.maxLevel}`;
                     if (skill.level > 0) {
                         const damage = this.player.getSkillDamage(skillData.name);
                         const manaCost = this.player.getSkillManaCost(skillData.name);
@@ -1853,6 +2038,38 @@ class UIManager {
         });
     }
     
+    getSkillsByTab() {
+        const skillCategories = {
+            offensive: [],
+            defensive: [],
+            passive: []
+        };
+        
+        // Dynamically organize skills by tab with grid positions
+        let tabCounters = { offensive: 0, defensive: 0, passive: 0 };
+        const skillsPerRow = 10;
+        
+        Object.keys(this.player.skills).forEach(skillName => {
+            const skill = this.player.skills[skillName];
+            const tab = skill.tab || 'offensive'; // Default to offensive if no tab specified
+            
+            if (skillCategories[tab]) {
+                const counter = tabCounters[tab];
+                const gridX = counter % skillsPerRow;
+                const gridY = Math.floor(counter / skillsPerRow);
+                
+                skillCategories[tab].push({
+                    name: skillName,
+                    display: this.capitalizeFirst(skillName.replace(/([A-Z])/g, ' $1').trim()),
+                    gridPos: [gridX, gridY]
+                });
+                
+                tabCounters[tab]++;
+            }
+        });
+        return skillCategories;
+    }
+    
     
     closeAllPanels() {
         this.closeInventory();
@@ -1882,7 +2099,11 @@ class UIManager {
                 const damage = this.player.getSkillDamage(hotbarItem.name);
                 const manaCost = this.player.getSkillManaCost(hotbarItem.name);
                 
-                tooltipText = `${this.capitalizeFirst(hotbarItem.name)}\nLevel: ${skill.level}/${skill.maxLevel}`;
+                tooltipText = `${this.capitalizeFirst(hotbarItem.name)}`;
+                if (skill.description) {
+                    tooltipText += `\n"${skill.description}"`;
+                }
+                tooltipText += `\n\nLevel: ${skill.level}/${skill.maxLevel}`;
                 if (damage > 0) tooltipText += `\nDamage: ${damage}`;
                 if (manaCost > 0) tooltipText += `\nMana Cost: ${manaCost}`;
                 if (hotbarItem.name === 'frostNova') {
@@ -1890,7 +2111,11 @@ class UIManager {
                     tooltipText += `\nRadius: ${radius}`;
                 }
             } else {
-                tooltipText = `${this.capitalizeFirst(hotbarItem.name)}\nNot learned`;
+                tooltipText = `${this.capitalizeFirst(hotbarItem.name)}`;
+                if (skill && skill.description) {
+                    tooltipText += `\n"${skill.description}"`;
+                }
+                tooltipText += `\nNot learned`;
             }
         } else if (hotbarItem.type === 'item') {
             const item = hotbarItem.item;

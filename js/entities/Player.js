@@ -71,9 +71,11 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.health = this.maxHealth;
         this.mana = this.maxMana;
         
-        // Skills system - 6 sorcerer skills with stat scaling
+        // Skills system - Organized by tabs (Offensive, Defensive, Passive)
         this.skills = {
+            // OFFENSIVE TAB - Direct damage dealing skills
             fireball: {
+                tab: 'offensive',
                 level: 1,
                 maxLevel: 20,
                 cooldown: 500,
@@ -82,44 +84,11 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 damagePerLevel: 5,
                 baseManaCost: 5,
                 manaCostPerLevel: 1,
-                statScaling: { energy: 0.2 }
-            },
-            teleport: {
-                level: 0,
-                maxLevel: 20,
-                cooldown: 2000,
-                lastUsed: 0,
-                baseManaCost: 20,
-                manaCostPerLevel: 1,
-                statScaling: { energy: 0.1 }
-            },
-            frostNova: {
-                level: 0,
-                maxLevel: 20,
-                cooldown: 3000,
-                lastUsed: 0,
-                baseDamage: 8,
-                damagePerLevel: 3,
-                baseManaCost: 15,
-                manaCostPerLevel: 2,
-                baseRadius: 100,
-                radiusPerLevel: 10,
-                statScaling: { energy: 0.15 }
-            },
-            chainLightning: {
-                level: 0,
-                maxLevel: 20,
-                cooldown: 1000,
-                lastUsed: 0,
-                baseDamage: 12,
-                damagePerLevel: 4,
-                baseManaCost: 12,
-                manaCostPerLevel: 2,
-                baseChains: 3,
-                chainsPerLevel: 0.2,
-                statScaling: { energy: 0.25 }
+                statScaling: { energy: 0.2 },
+                description: 'Hurls a fiery projectile that explodes on impact'
             },
             iceBolt: {
+                tab: 'offensive',
                 level: 0,
                 maxLevel: 20,
                 cooldown: 300,
@@ -130,9 +99,26 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 manaCostPerLevel: 1,
                 baseAccuracy: 70,
                 accuracyPerLevel: 1.5,
-                statScaling: { energy: 0.1, dexterity: 0.3 }
+                statScaling: { energy: 0.1, dexterity: 0.3 },
+                description: 'Fires a piercing ice shard that can hit multiple enemies'
+            },
+            chainLightning: {
+                tab: 'offensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 1000,
+                lastUsed: 0,
+                baseDamage: 12,
+                damagePerLevel: 4,
+                baseManaCost: 12,
+                manaCostPerLevel: 2,
+                baseChains: 3,
+                chainsPerLevel: 0.2,
+                statScaling: { energy: 0.25 },
+                description: 'Lightning that jumps between nearby enemies'
             },
             meteor: {
+                tab: 'offensive',
                 level: 0,
                 maxLevel: 20,
                 cooldown: 4000,
@@ -143,7 +129,188 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 manaCostPerLevel: 3,
                 baseImpact: 80,
                 impactPerLevel: 5,
-                statScaling: { energy: 0.2, strength: 0.4 }
+                statScaling: { energy: 0.2, strength: 0.4 },
+                description: 'Calls down a devastating meteor from the sky'
+            },
+            lightningBolt: {
+                tab: 'offensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 600,
+                lastUsed: 0,
+                baseDamage: 15,
+                damagePerLevel: 6,
+                baseManaCost: 8,
+                manaCostPerLevel: 2,
+                basePierce: 2,
+                piercePerLevel: 0.15,
+                statScaling: { energy: 0.3 },
+                description: 'Fast lightning bolt that pierces through enemies'
+            },
+            blizzard: {
+                tab: 'offensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 8000,
+                lastUsed: 0,
+                baseDamage: 20,
+                damagePerLevel: 7,
+                baseManaCost: 40,
+                manaCostPerLevel: 4,
+                baseDuration: 5000,
+                durationPerLevel: 200,
+                baseRadius: 120,
+                radiusPerLevel: 5,
+                statScaling: { energy: 0.25 },
+                description: 'Creates a freezing blizzard in target area'
+            },
+            hydra: {
+                tab: 'offensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 10000,
+                lastUsed: 0,
+                baseDamage: 12,
+                damagePerLevel: 4,
+                baseManaCost: 35,
+                manaCostPerLevel: 3,
+                baseDuration: 15000,
+                durationPerLevel: 1000,
+                baseFireRate: 1500,
+                fireRateReduction: 50,
+                statScaling: { energy: 0.2 },
+                description: 'Summons a fire-breathing hydra that attacks enemies'
+            },
+            
+            // DEFENSIVE TAB - Protection and utility skills
+            frostNova: {
+                tab: 'defensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 3000,
+                lastUsed: 0,
+                baseDamage: 8,
+                damagePerLevel: 3,
+                baseManaCost: 15,
+                manaCostPerLevel: 2,
+                baseRadius: 100,
+                radiusPerLevel: 10,
+                statScaling: { energy: 0.15 },
+                description: 'Freezes all nearby enemies in place'
+            },
+            teleport: {
+                tab: 'defensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 2000,
+                lastUsed: 0,
+                baseManaCost: 20,
+                manaCostPerLevel: 1,
+                statScaling: { energy: 0.1 },
+                description: 'Instantly teleports to target location'
+            },
+            energyShield: {
+                tab: 'defensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 15000,
+                lastUsed: 0,
+                baseManaCost: 25,
+                manaCostPerLevel: 2,
+                baseAbsorption: 40,
+                absorptionPerLevel: 2,
+                baseDuration: 30000,
+                durationPerLevel: 2000,
+                statScaling: { energy: 0.15 },
+                description: 'Absorbs damage by consuming mana instead of health'
+            },
+            thunderStorm: {
+                tab: 'defensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 20000,
+                lastUsed: 0,
+                baseDamage: 18,
+                damagePerLevel: 5,
+                baseManaCost: 45,
+                manaCostPerLevel: 3,
+                baseDuration: 20000,
+                durationPerLevel: 2000,
+                baseStrikeRate: 2000,
+                strikeRateReduction: 50,
+                statScaling: { energy: 0.2 },
+                description: 'Creates a storm that strikes enemies with lightning'
+            },
+            chillingArmor: {
+                tab: 'defensive',
+                level: 0,
+                maxLevel: 20,
+                cooldown: 25000,
+                lastUsed: 0,
+                baseChillDamage: 10,
+                chillDamagePerLevel: 3,
+                baseManaCost: 30,
+                manaCostPerLevel: 2,
+                baseChillDuration: 2000,
+                chillDurationPerLevel: 200,
+                baseArmorDuration: 60000,
+                armorDurationPerLevel: 5000,
+                statScaling: { energy: 0.1, vitality: 0.1 },
+                description: 'Chills and damages attackers when you take damage'
+            },
+            
+            // PASSIVE TAB - Permanent bonuses (no cooldowns, no casting)
+            warmth: {
+                tab: 'passive',
+                level: 0,
+                maxLevel: 20,
+                baseManaRegen: 0.1,
+                manaRegenPerLevel: 0.05,
+                description: 'Increases mana regeneration rate'
+            },
+            staticField: {
+                tab: 'passive',
+                level: 0,
+                maxLevel: 10,
+                baseChance: 5,
+                chancePerLevel: 2,
+                baseRadius: 60,
+                radiusPerLevel: 5,
+                description: 'Chance to create static field when hit, reducing enemy health'
+            },
+            fireResistance: {
+                tab: 'passive',
+                level: 0,
+                maxLevel: 20,
+                baseResistance: 2,
+                resistancePerLevel: 1,
+                description: 'Increases resistance to fire damage'
+            },
+            coldResistance: {
+                tab: 'passive',
+                level: 0,
+                maxLevel: 20,
+                baseResistance: 2,
+                resistancePerLevel: 1,
+                description: 'Increases resistance to cold damage'
+            },
+            lightningResistance: {
+                tab: 'passive',
+                level: 0,
+                maxLevel: 20,
+                baseResistance: 2,
+                resistancePerLevel: 1,
+                description: 'Increases resistance to lightning damage'
+            },
+            mastery: {
+                tab: 'passive',
+                level: 0,
+                maxLevel: 20,
+                baseDamageBonus: 5,
+                damageBonusPerLevel: 3,
+                baseManaCostReduction: 2,
+                manaCostReductionPerLevel: 1,
+                description: 'Increases spell damage and reduces mana costs'
             }
         };
         
@@ -654,18 +821,8 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         skill.lastUsed = currentTime;
         this.mana -= manaCost;
         
-        // Teleport effect
-        this.setPosition(targetX, targetY);
-        
-        // Visual teleport effect
-        const teleportEffect = this.scene.add.graphics();
-        teleportEffect.fillStyle(0x0088ff, 0.8);
-        teleportEffect.fillCircle(targetX, targetY, 30);
-        teleportEffect.setDepth(100);
-        
-        this.scene.time.delayedCall(300, () => {
-            teleportEffect.destroy();
-        });
+        // Create teleport effect using the new Teleport class
+        new Teleport(this.scene, this, targetX, targetY);
         
         return true;
     }
@@ -728,6 +885,130 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         const impact = this.getSkillImpact('meteor');
         
         new Meteor(this.scene, this.x, this.y, targetX, targetY, damage, impact);
+        return true;
+    }
+    
+    // NEW OFFENSIVE SKILLS
+    castLightningBolt(targetX, targetY) {
+        const skill = this.skills.lightningBolt;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('lightningBolt');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('lightningBolt');
+        new LightningBolt(this.scene, this.x, this.y, targetX, targetY, damage);
+        return true;
+    }
+    
+    castBlizzard(targetX, targetY) {
+        const skill = this.skills.blizzard;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('blizzard');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('blizzard');
+        const duration = skill.baseDuration + (skill.durationPerLevel * (skill.level - 1));
+        const radius = skill.baseRadius + (skill.radiusPerLevel * (skill.level - 1));
+        
+        new Blizzard(this.scene, this.x, this.y, targetX, targetY, damage, duration, radius);
+        return true;
+    }
+    
+    castHydra(targetX, targetY) {
+        const skill = this.skills.hydra;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('hydra');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('hydra');
+        const duration = skill.baseDuration + (skill.durationPerLevel * (skill.level - 1));
+        const fireRate = Math.max(500, skill.baseFireRate - (skill.fireRateReduction * (skill.level - 1)));
+        
+        new Hydra(this.scene, targetX, targetY, damage, duration, fireRate);
+        return true;
+    }
+    
+    // NEW DEFENSIVE SKILLS
+    castEnergyShield() {
+        const skill = this.skills.energyShield;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('energyShield');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const absorption = skill.baseAbsorption + (skill.absorptionPerLevel * (skill.level - 1));
+        const duration = skill.baseDuration + (skill.durationPerLevel * (skill.level - 1));
+        
+        new EnergyShield(this.scene, this, absorption, duration);
+        return true;
+    }
+    
+    castThunderStorm() {
+        const skill = this.skills.thunderStorm;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('thunderStorm');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const damage = this.getSkillDamage('thunderStorm');
+        const duration = skill.baseDuration + (skill.durationPerLevel * (skill.level - 1));
+        const strikeRate = Math.max(500, skill.baseStrikeRate - (skill.strikeRateReduction * (skill.level - 1)));
+        
+        new ThunderStorm(this.scene, this, damage, duration, strikeRate);
+        return true;
+    }
+    
+    castChillingArmor() {
+        const skill = this.skills.chillingArmor;
+        const currentTime = this.scene.time.now;
+        
+        if (skill.level === 0) return false;
+        if (currentTime - skill.lastUsed < skill.cooldown) return false;
+        
+        const manaCost = this.getSkillManaCost('chillingArmor');
+        if (this.mana < manaCost) return false;
+        
+        skill.lastUsed = currentTime;
+        this.mana -= manaCost;
+        
+        const chillDamage = skill.baseChillDamage + (skill.chillDamagePerLevel * (skill.level - 1));
+        const chillDuration = skill.baseChillDuration + (skill.chillDurationPerLevel * (skill.level - 1));
+        const armorDuration = skill.baseArmorDuration + (skill.armorDurationPerLevel * (skill.level - 1));
+        
+        new ChillingArmor(this.scene, this, chillDamage, chillDuration, armorDuration);
         return true;
     }
     

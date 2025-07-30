@@ -8,6 +8,13 @@ class GameScene extends Phaser.Scene {
         // Initialize transition flag
         this.isTransitioning = false;
         
+        // Initialize player statistics tracking
+        this.gameStartTime = this.time.now;
+        this.playerStats = {
+            enemiesKilled: 0,
+            itemsCollected: 0
+        };
+        
         this.generateWorld();
         
         this.physics.world.setBounds(0, 0, 150 * 32, 150 * 32);
@@ -337,23 +344,31 @@ class GameScene extends Phaser.Scene {
                                    (child === this.enemyCount) ||
                                    (child === this.worldInfo) ||
                                    (child === this.fpsText) ||
-                                   // Player health/mana bars
-                                   (this.player && (
-                                       child === this.player.healthBar ||
-                                       child === this.player.manaBar
-                                   )) ||
                                    // UIManager elements
                                    (this.uiManager && (
                                        child === this.uiManager.expBarBg ||
                                        child === this.uiManager.expBar ||
                                        child === this.uiManager.expText ||
                                        child === this.uiManager.levelText ||
-                                       child === this.uiManager.hotbarBg ||
-                                       this.uiManager.hotbarSlots.some(slot => 
-                                           child === slot.background || 
+                                       child === this.uiManager.potionHotbarBg ||
+                                       child === this.uiManager.mouseHotbarBg ||
+                                       child === this.uiManager.skillsHotbarBg ||
+                                       // Check all hotbar slot arrays
+                                       (this.uiManager.potionHotbarSlots && this.uiManager.potionHotbarSlots.some(slot => 
+                                           slot && (child === slot.background || 
                                            child === slot.label || 
-                                           child === slot.icon
-                                       )
+                                           child === slot.icon)
+                                       )) ||
+                                       (this.uiManager.mouseHotbarSlots && this.uiManager.mouseHotbarSlots.some(slot => 
+                                           slot && (child === slot.background || 
+                                           child === slot.label || 
+                                           child === slot.icon)
+                                       )) ||
+                                       (this.uiManager.skillsHotbarSlots && this.uiManager.skillsHotbarSlots.some(slot => 
+                                           slot && (child === slot.background || 
+                                           child === slot.label || 
+                                           child === slot.icon)
+                                       ))
                                    ));
                 
                 if (!isUIElement) {
@@ -491,11 +506,7 @@ class GameScene extends Phaser.Scene {
                 this.cameras.main.startFollow(this.player);
                 this.cameras.main.centerOn(this.player.x, this.player.y);
                 
-                // Force recreate player health bar after world transition
-                if (this.player.healthBar) {
-                    this.player.healthBar.destroy();
-                }
-                this.player.createHealthBar();
+                // Player health/mana is managed by UIManager, no need to recreate health bar
                 
                 // Recreate UI elements to ensure they work properly
                 this.recreateUIElements();
@@ -590,6 +601,10 @@ class GameScene extends Phaser.Scene {
         if (itemSprite.isItemDrop && this.uiManager) {
             const success = this.uiManager.addItemToInventory(itemSprite.itemData);
             if (success) {
+                // Track item pickup for statistics
+                if (this.playerStats) {
+                    this.playerStats.itemsCollected++;
+                }
                 // Show pickup text
                 const pickupText = this.add.text(itemSprite.x, itemSprite.y - 20, itemSprite.itemData.name, {
                     fontSize: '12px',
@@ -669,21 +684,23 @@ class GameScene extends Phaser.Scene {
     gameOver() {
         this.enemySpawnTimer.remove();
         
-        const gameOverText = this.add.text(
-            this.cameras.main.centerX,
-            this.cameras.main.centerY,
-            'GAME OVER\nPress R to restart',
-            {
-                fontSize: '48px',
-                fill: '#ff0000',
-                align: 'center',
-                backgroundColor: '#000000',
-                padding: { x: 20, y: 10 }
-            }
-        ).setOrigin(0.5).setScrollFactor(0).setDepth(2000);
+        // Calculate play time
+        const playTime = this.time.now - this.gameStartTime;
         
-        this.input.keyboard.once('keydown-R', () => {
-            this.scene.restart();
+        // Prepare player data for EndGameScreen
+        const playerData = {
+            level: this.player.level,
+            experience: this.player.experience,
+            worldLevel: this.currentWorldLevel,
+            enemiesKilled: this.playerStats.enemiesKilled,
+            itemsCollected: this.playerStats.itemsCollected,
+            playTime: playTime
+        };
+        
+        // Fade out and transition to EndGameScreen
+        this.cameras.main.fadeOut(1500, 0, 0, 0);
+        this.time.delayedCall(1500, () => {
+            this.scene.start('EndGameScreen', playerData);
         });
     }
 }
