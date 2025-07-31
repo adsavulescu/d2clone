@@ -64,13 +64,13 @@ class GameScene extends Phaser.Scene {
         
         // Add wall collisions and store references
         if (this.worldWalls && this.worldWalls.children) {
+            // Add proper wall collision for player with smooth sliding
             const playerWallCollider = this.physics.add.collider(this.player, this.worldWalls);
             const enemyWallCollider = this.physics.add.collider(this.enemies, this.worldWalls);
             this.wallColliders.push(playerWallCollider, enemyWallCollider);
         }
         
-        // Item pickup collision
-        this.physics.add.overlap(this.player, this.itemDrops, this.pickupItem, null, this);
+        // No automatic pickup - items require clicking in Diablo 2 style
         
         // Portal collision for world transition
         this.setupPortalCollision();
@@ -86,26 +86,61 @@ class GameScene extends Phaser.Scene {
     
     setupControls() {
         this.playerTarget = null;
+        this.pendingItemPickup = null;
         
+        
+        // Unified input handling for both item cursor and regular gameplay
         this.input.on('pointerdown', (pointer) => {
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             
+            // Handle item on cursor first
+            if (this.uiManager && this.uiManager.isItemOnCursor) {
+                if (pointer.leftButtonDown()) {
+                    // Check if we clicked on empty world space (not on UI)
+                    const isInUI = pointer.y < 200 || // Top UI area
+                                  pointer.y > this.cameras.main.height - 100 || // Bottom UI area  
+                                  pointer.x > this.cameras.main.width - 200; // Right UI area (minimap)
+                    
+                    if (!isInUI) {
+                        this.uiManager.placeItem({x: this.player.x, y: this.player.y}, 'world');
+                        return; // Prevent other actions when dropping item
+                    }
+                    return; // Don't handle movement when we have item on cursor
+                } else if (pointer.rightButtonDown()) {
+                    // Right-click to cancel drag (Diablo 2 style)
+                    this.uiManager.cleanupCursor();
+                    return; // Prevent other actions when canceling drag
+                }
+            }
+            
+            // Check for ground item clicks first (Diablo 2 style click-to-pickup)
             if (pointer.leftButtonDown()) {
-                // Left click - use LMB mouse hotbar slot (index 0)
-                if (this.uiManager) {
-                    this.uiManager.useMouseHotbarSlot(0, worldPoint);
+                const clickedItem = this.getItemAtPoint(worldPoint.x, worldPoint.y);
+                if (clickedItem) {
+                    this.pickupItemByClick(clickedItem);
+                    return; // Don't process other actions when picking up item
                 }
-                
-            } else if (pointer.rightButtonDown()) {
-                // Right click - use RMB mouse hotbar slot (index 2)
-                if (this.uiManager) {
-                    this.uiManager.useMouseHotbarSlot(2, worldPoint);
-                }
-                
-            } else if (pointer.middleButtonDown()) {
-                // Middle click - use MMB mouse hotbar slot (index 1)
-                if (this.uiManager) {
-                    this.uiManager.useMouseHotbarSlot(1, worldPoint);
+            }
+            
+            // Regular gameplay input (movement/skills)
+            if (!this.uiManager || !this.uiManager.isItemOnCursor) {
+                if (pointer.leftButtonDown()) {
+                    // Left click - use LMB mouse hotbar slot (index 0)
+                    if (this.uiManager) {
+                        this.uiManager.useMouseHotbarSlot(0, worldPoint);
+                    }
+                    
+                } else if (pointer.rightButtonDown()) {
+                    // Right click - use RMB mouse hotbar slot (index 2)
+                    if (this.uiManager) {
+                        this.uiManager.useMouseHotbarSlot(2, worldPoint);
+                    }
+                    
+                } else if (pointer.middleButtonDown()) {
+                    // Middle click - use MMB mouse hotbar slot (index 1)
+                    if (this.uiManager) {
+                        this.uiManager.useMouseHotbarSlot(1, worldPoint);
+                    }
                 }
             }
         });
@@ -226,8 +261,9 @@ class GameScene extends Phaser.Scene {
             this.fpsText.destroy();
         }
         
-        // Enemy counter and world info in top-right
-        this.enemyCount = this.add.text(this.cameras.main.width - 20, 20, '', {
+        // Enemy counter and world info in top-right (moved under minimap)
+        const minimapBottom = 20 + 150 + 10; // minimap Y + size + spacing
+        this.enemyCount = this.add.text(this.cameras.main.width - 20, minimapBottom, '', {
             fontSize: '16px',
             fill: '#ffffff',
             fontWeight: 'bold',
@@ -237,7 +273,7 @@ class GameScene extends Phaser.Scene {
             strokeThickness: 1
         }).setOrigin(1, 0).setScrollFactor(0).setDepth(1000);
         
-        this.worldInfo = this.add.text(this.cameras.main.width - 20, 60, '', {
+        this.worldInfo = this.add.text(this.cameras.main.width - 20, minimapBottom + 40, '', {
             fontSize: '16px',
             fill: '#ffdd44',
             fontWeight: 'bold',
@@ -248,7 +284,7 @@ class GameScene extends Phaser.Scene {
         }).setOrigin(1, 0).setScrollFactor(0).setDepth(1000);
         
         // FPS debug meter
-        this.fpsText = this.add.text(this.cameras.main.width - 20, 100, '', {
+        this.fpsText = this.add.text(this.cameras.main.width - 20, minimapBottom + 80, '', {
             fontSize: '14px',
             fill: '#00ff00',
             fontWeight: 'bold',
@@ -365,6 +401,11 @@ class GameScene extends Phaser.Scene {
         
         this.worldGenerator = new WorldGenerator(this, 150, 150, 32, this.currentWorldLevel);
         this.worldTiles = this.worldGenerator.generate();
+        
+        // Refresh minimap for new world
+        if (this.uiManager) {
+            this.uiManager.refreshMinimap();
+        }
         
         // Get the wall collision group
         this.worldWalls = this.worldGenerator.getWallGroup();
@@ -500,7 +541,9 @@ class GameScene extends Phaser.Scene {
                                            slot && (child === slot.background || 
                                            child === slot.label || 
                                            child === slot.icon)
-                                       ))
+                                       )) ||
+                                       // Preserve minimap container and its elements
+                                       child === this.uiManager.minimapContainer
                                    ));
                 
                 if (!isUIElement) {
@@ -534,7 +577,7 @@ class GameScene extends Phaser.Scene {
             
             // Re-enable collisions
             this.physics.add.collider(this.enemies, this.enemies);
-            this.physics.add.overlap(this.player, this.itemDrops, this.pickupItem, null, this);
+            // No automatic pickup - items require clicking in Diablo 2 style
             
             // Don't add wall collisions here - walls have been destroyed
             // Wall collisions will be re-added after new world is generated
@@ -622,6 +665,7 @@ class GameScene extends Phaser.Scene {
                 this.player.mana = this.player.maxMana;
                 this.player.setPosition(newSpawnPos.x, newSpawnPos.y);
                 this.player.setVelocity(0, 0); // Stop any movement
+                this.playerTarget = null; // Clear movement target to prevent automatic movement
                 this.player.setVisible(true);
                 this.player.setActive(true);
                 this.player.setAlpha(1); // Ensure full opacity
@@ -640,6 +684,9 @@ class GameScene extends Phaser.Scene {
                 
                 // Hide enemy health bar during transition
                 this.hideEnemyHealthBar();
+                
+                // Hide ground item tooltip during transition
+                this.hideGroundItemTooltip();
                 
                 // Wait a moment before spawning enemies to ensure player is safe
                 this.time.delayedCall(500, () => {
@@ -695,8 +742,63 @@ class GameScene extends Phaser.Scene {
         
         this.player.update(this.playerTarget);
         
+        // Check if player has reached a pending item pickup
+        if (this.pendingItemPickup && this.pendingItemPickup.active) {
+            const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.pendingItemPickup.x, this.pendingItemPickup.y);
+            const pickupRange = 48; // Same range as initial check
+            
+            if (distance <= pickupRange) {
+                // Player is now close enough - attempt pickup
+                const success = this.uiManager.addItemToInventory(this.pendingItemPickup.itemData);
+                if (success) {
+                    // Track item pickup for statistics
+                    if (this.playerStats) {
+                        this.playerStats.itemsCollected++;
+                    }
+                    // Show pickup text
+                    const pickupText = this.add.text(this.pendingItemPickup.x, this.pendingItemPickup.y - 20, this.pendingItemPickup.itemData.name, {
+                        fontSize: '12px',
+                        fill: this.pendingItemPickup.itemData.getDisplayName().color,
+                        fontWeight: 'bold'
+                    }).setOrigin(0.5).setDepth(1000);
+                    
+                    this.tweens.add({
+                        targets: pickupText,
+                        y: pickupText.y - 30,
+                        alpha: 0,
+                        duration: 1000,
+                        onComplete: () => pickupText.destroy()
+                    });
+                    
+                    this.pendingItemPickup.destroy();
+                } else {
+                    // Show "inventory full" message
+                    const fullText = this.add.text(this.pendingItemPickup.x, this.pendingItemPickup.y - 20, 'Inventory Full!', {
+                        fontSize: '12px',
+                        fill: '#ff0000',
+                        fontWeight: 'bold'
+                    }).setOrigin(0.5).setDepth(1000);
+                    
+                    this.tweens.add({
+                        targets: fullText,
+                        y: fullText.y - 30,
+                        alpha: 0,
+                        duration: 1000,
+                        onComplete: () => fullText.destroy()
+                    });
+                }
+                
+                // Clear the pending pickup
+                this.pendingItemPickup = null;
+                this.playerTarget = null; // Stop movement
+            }
+        }
+        
         // Update enemy hover detection
         this.updateEnemyHover();
+        
+        // Update ground item hover detection
+        this.updateGroundItemHover();
         
         
         // Update new UI system
@@ -788,7 +890,7 @@ class GameScene extends Phaser.Scene {
         this.enemyHealthBar.setVisible(true);
         
         // Update texts safely
-        const enemyName = enemy.isBoss ? enemy.bossName : 'Skeletal Warrior';
+        const enemyName = enemy.isBoss ? enemy.bossName : (enemy.config ? enemy.config.name : 'Unknown Enemy');
         const typeText = enemy.isBoss ? `Level ${enemy.level} Boss` : `Level ${enemy.level}`;
         
         // Use a safe text update method
@@ -884,8 +986,73 @@ class GameScene extends Phaser.Scene {
         this.hoveredEnemy = null;
     }
     
-    pickupItem(player, itemSprite) {
+    getItemAtPoint(worldX, worldY) {
+        // Find ground item at clicked point
+        let clickedItem = null;
+        let closestDistance = Infinity;
+        const maxPickupDistance = 30; // Pickup radius in pixels
+        
+        this.itemDrops.children.entries.forEach(itemSprite => {
+            if (itemSprite && itemSprite.active && itemSprite.isItemDrop) {
+                const distance = Phaser.Math.Distance.Between(worldX, worldY, itemSprite.x, itemSprite.y);
+                if (distance <= maxPickupDistance && distance < closestDistance) {
+                    closestDistance = distance;
+                    clickedItem = itemSprite;
+                }
+            }
+        });
+        
+        return clickedItem;
+    }
+    
+    getItemAtPointForTooltip(worldX, worldY) {
+        // Find ground item at mouse point with smaller radius for more precise tooltip detection
+        let hoveredItem = null;
+        let closestDistance = Infinity;
+        const maxHoverDistance = 20; // Smaller radius for tooltips to be more precise
+        
+        this.itemDrops.children.entries.forEach(itemSprite => {
+            if (itemSprite && itemSprite.active && itemSprite.isItemDrop) {
+                const distance = Phaser.Math.Distance.Between(worldX, worldY, itemSprite.x, itemSprite.y);
+                if (distance <= maxHoverDistance && distance < closestDistance) {
+                    closestDistance = distance;
+                    hoveredItem = itemSprite;
+                }
+            }
+        });
+        
+        return hoveredItem;
+    }
+    
+    pickupItemByClick(itemSprite) {
         if (itemSprite.isItemDrop && this.uiManager) {
+            // Check if this item was recently dropped by the player
+            if (itemSprite.playerDropped && itemSprite.dropTime) {
+                const timeSinceDrop = this.time.now - itemSprite.dropTime;
+                const pickupDelay = 1000; // 1 second delay before pickup allowed
+                
+                if (timeSinceDrop < pickupDelay) {
+                    return; // Don't pick up yet
+                }
+                
+                // Clear the player dropped flag after delay
+                itemSprite.playerDropped = false;
+            }
+            
+            // Check distance to item - player must be close enough to pick it up
+            const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, itemSprite.x, itemSprite.y);
+            const pickupRange = 48; // About 1.5 tiles (32px per tile)
+            
+            if (distance > pickupRange) {
+                // Player is too far - move them to the item first
+                this.playerTarget = { x: itemSprite.x, y: itemSprite.y };
+                this.createMoveMarker(itemSprite.x, itemSprite.y);
+                
+                // Store the item to pick up once player reaches it
+                this.pendingItemPickup = itemSprite;
+                return;
+            }
+            
             const success = this.uiManager.addItemToInventory(itemSprite.itemData);
             if (success) {
                 // Track item pickup for statistics
@@ -925,6 +1092,76 @@ class GameScene extends Phaser.Scene {
                 });
             }
         }
+    }
+    
+    updateGroundItemHover() {
+        // Skip if UI is open or item is on cursor
+        if (this.uiManager && (this.uiManager.isInventoryOpen || this.uiManager.isCharacterSheetOpen || this.uiManager.isSkillsTreeOpen || this.uiManager.isItemOnCursor)) {
+            this.hideGroundItemTooltip();
+            return;
+        }
+        
+        // Get mouse position in world coordinates
+        const pointer = this.input.activePointer;
+        if (!pointer) {
+            this.hideGroundItemTooltip();
+            return;
+        }
+        
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        
+        // Find ground item under mouse with smaller detection radius for tooltips
+        const itemUnderMouse = this.getItemAtPointForTooltip(worldPoint.x, worldPoint.y);
+        
+        // Update hovered ground item
+        if (itemUnderMouse !== this.hoveredGroundItem) {
+            // Always hide tooltip first when changing items
+            this.hideGroundItemTooltip();
+            
+            this.hoveredGroundItem = itemUnderMouse;
+            
+            if (this.hoveredGroundItem) {
+                this.showGroundItemTooltip(this.hoveredGroundItem, pointer.x, pointer.y);
+            }
+        } else if (this.hoveredGroundItem && this.groundItemTooltip) {
+            // Double-check that we're still actually hovering over the item
+            const currentItem = this.getItemAtPointForTooltip(worldPoint.x, worldPoint.y);
+            if (currentItem !== this.hoveredGroundItem) {
+                // We moved away, hide tooltip
+                this.hideGroundItemTooltip();
+            } else {
+                // Update tooltip position to follow mouse
+                this.groundItemTooltip.x = pointer.x + 15;
+                this.groundItemTooltip.y = pointer.y - 10;
+            }
+        } else if (this.groundItemTooltip && !this.hoveredGroundItem) {
+            // Safety check: if we have a tooltip but no hovered item, hide it
+            this.hideGroundItemTooltip();
+        }
+    }
+    
+    showGroundItemTooltip(itemSprite, mouseX, mouseY) {
+        // Hide existing tooltip first
+        this.hideGroundItemTooltip();
+        
+        if (!itemSprite || !itemSprite.itemData) return;
+        
+        const item = itemSprite.itemData;
+        
+        // Use the new Diablo 2-style tooltip system through UIManager
+        if (this.uiManager) {
+            this.uiManager.showInventoryItemTooltip(item, mouseX, mouseY);
+            // Store reference for cleanup
+            this.groundItemTooltip = this.uiManager.tooltipContainer;
+        }
+    }
+    
+    hideGroundItemTooltip() {
+        if (this.uiManager) {
+            this.uiManager.hideTooltip();
+        }
+        this.groundItemTooltip = null;
+        this.hoveredGroundItem = null;
     }
     
     
@@ -990,4 +1227,5 @@ class GameScene extends Phaser.Scene {
             this.scene.start('EndGameScreen', playerData);
         });
     }
+    
 }

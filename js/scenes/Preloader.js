@@ -2093,72 +2093,76 @@ class Preloader extends Phaser.Scene {
     }
     
     drawSuicideBomber(graphics, direction) {
-        // Fast-moving bomber with explosive devices
+        // Fast-moving bomber with explosive devices - 3x size
         switch (direction) {
             case 'down':
-                // Lean, agile body
+                // Lean, agile body - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillEllipse(12, 15, 10, 8);
+                graphics.fillEllipse(36, 45, 30, 24);
                 
-                // Dark clothing
+                // Dark clothing - 3x size
                 graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(8, 12, 8, 6);
+                graphics.fillRect(24, 36, 24, 18);
                 
-                // Arms with bomb attachments
+                // Arms with bomb attachments - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillRect(5, 13, 3, 2);
-                graphics.fillRect(16, 13, 3, 2);
+                graphics.fillRect(15, 39, 9, 6);
+                graphics.fillRect(48, 39, 9, 6);
                 
-                // Bomb devices on arms
+                // Bomb devices on arms - 3x size
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillCircle(4, 14, 2);
-                graphics.fillCircle(20, 14, 2);
+                graphics.fillCircle(12, 42, 6);
+                graphics.fillCircle(60, 42, 6);
                 graphics.fillStyle(0xff0000, 1);
-                graphics.fillCircle(4, 14, 1);
-                graphics.fillCircle(20, 14, 1);
+                graphics.fillCircle(12, 42, 3);
+                graphics.fillCircle(60, 42, 3);
                 
-                // Legs
+                // Legs - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillRect(9, 19, 2, 4);
-                graphics.fillRect(13, 19, 2, 4);
+                graphics.fillRect(27, 57, 6, 12);
+                graphics.fillRect(39, 57, 6, 12);
                 
-                // Hooded head
+                // Hooded head - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillCircle(12, 8, 4);
+                graphics.fillCircle(36, 24, 12);
                 graphics.fillStyle(0x333333, 1);
-                graphics.fillEllipse(12, 6, 6, 4);
+                graphics.fillEllipse(36, 18, 18, 12);
                 
-                // Glowing eyes
+                // Glowing eyes - 3x size
                 graphics.fillStyle(0xff4400, 1);
-                graphics.fillCircle(10, 7, 1);
-                graphics.fillCircle(14, 7, 1);
+                graphics.fillCircle(30, 21, 3);
+                graphics.fillCircle(42, 21, 3);
                 
-                // Central explosive device
+                // Central explosive device - 3x size
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillCircle(12, 15, 4);
+                graphics.fillCircle(36, 45, 12);
                 graphics.fillStyle(0xff0000, 1);
-                graphics.fillCircle(12, 15, 2);
+                graphics.fillCircle(36, 45, 6);
                 graphics.fillStyle(0xffff00, 1);
-                graphics.fillCircle(12, 15, 1);
+                graphics.fillCircle(36, 45, 3);
                 break;
                 
             case 'up':
             case 'left':
             case 'right':
-                // Similar for other directions
+            case 'downleft':
+            case 'downright':
+            case 'upleft':
+            case 'upright':
+                // Similar for other directions - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillEllipse(12, 15, 10, 8);
+                graphics.fillEllipse(36, 45, 30, 24);
                 graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(8, 12, 8, 6);
+                graphics.fillRect(24, 36, 24, 18);
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillRect(7, 13, 3, 2);
-                graphics.fillRect(9, 19, 2, 4);
-                graphics.fillRect(13, 19, 2, 4);
-                graphics.fillCircle(12, 8, 4);
+                graphics.fillRect(21, 39, 9, 6);
+                graphics.fillRect(27, 57, 6, 12);
+                graphics.fillRect(39, 57, 6, 12);
+                graphics.fillCircle(36, 24, 12);
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillCircle(12, 15, 4);
+                graphics.fillCircle(36, 45, 12);
                 graphics.fillStyle(0xff0000, 1);
-                graphics.fillCircle(12, 15, 2);
+                graphics.fillCircle(36, 45, 6);
                 break;
         }
     }
@@ -2180,71 +2184,75 @@ class Preloader extends Phaser.Scene {
     drawShaman(graphics, direction) {
         switch (direction) {
             case 'down':
-                // Orc shaman body
+                // Orc shaman body - 3x size
                 graphics.fillStyle(0x228b22, 1);
-                graphics.fillEllipse(12, 15, 12, 10);
+                graphics.fillEllipse(36, 45, 36, 30);
                 
-                // Ornate robes
+                // Ornate robes - 3x size
                 graphics.fillStyle(0x4b0082, 1);
-                graphics.fillRect(7, 11, 10, 10);
+                graphics.fillRect(21, 33, 30, 30);
                 
-                // Tribal markings on robes
+                // Tribal markings on robes - 3x size
                 graphics.fillStyle(0xffd700, 1);
-                graphics.fillRect(9, 13, 2, 1);
-                graphics.fillRect(13, 13, 2, 1);
-                graphics.fillRect(11, 16, 2, 1);
+                graphics.fillRect(27, 39, 6, 3);
+                graphics.fillRect(39, 39, 6, 3);
+                graphics.fillRect(33, 48, 6, 3);
                 
-                // Arms
+                // Arms - 3x size
                 graphics.fillStyle(0x228b22, 1);
-                graphics.fillRect(4, 12, 4, 3);
-                graphics.fillRect(16, 12, 4, 3);
+                graphics.fillRect(12, 36, 12, 9);
+                graphics.fillRect(48, 36, 12, 9);
                 
-                // Legs
-                graphics.fillRect(8, 19, 4, 4);
-                graphics.fillRect(12, 19, 4, 4);
+                // Legs - 3x size
+                graphics.fillRect(24, 57, 12, 12);
+                graphics.fillRect(36, 57, 12, 12);
                 
-                // Shaman head with headdress
+                // Shaman head with headdress - 3x size
                 graphics.fillStyle(0x228b22, 1);
-                graphics.fillCircle(12, 8, 5);
+                graphics.fillCircle(36, 24, 15);
                 
-                // Feathered headdress
+                // Feathered headdress - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillEllipse(12, 4, 8, 4);
+                graphics.fillEllipse(36, 12, 24, 12);
                 graphics.fillStyle(0xff4400, 1);
-                graphics.fillRect(8, 2, 2, 4);
-                graphics.fillRect(14, 2, 2, 4);
+                graphics.fillRect(24, 6, 6, 12);
+                graphics.fillRect(42, 6, 6, 12);
                 graphics.fillStyle(0x00ff00, 1);
-                graphics.fillRect(11, 1, 2, 5);
+                graphics.fillRect(33, 3, 6, 15);
                 
-                // Glowing eyes
+                // Glowing eyes - 3x size
                 graphics.fillStyle(0x00ffff, 1);
-                graphics.fillCircle(10, 7, 1.5);
-                graphics.fillCircle(14, 7, 1.5);
+                graphics.fillCircle(30, 21, 4.5);
+                graphics.fillCircle(42, 21, 4.5);
                 
-                // Staff
+                // Staff - 3x size
                 graphics.fillStyle(0x8b4513, 1);
-                graphics.fillRect(20, 6, 2, 16);
+                graphics.fillRect(60, 18, 6, 48);
                 graphics.fillStyle(0x00ffff, 1);
-                graphics.fillCircle(21, 4, 3);
+                graphics.fillCircle(63, 12, 9);
                 graphics.fillStyle(0x0088ff, 0.7);
-                graphics.fillCircle(21, 4, 2);
+                graphics.fillCircle(63, 12, 6);
                 break;
                 
             case 'up':
             case 'left':
             case 'right':
-                // Similar structure for other directions
+            case 'downleft':
+            case 'downright':
+            case 'upleft':
+            case 'upright':
+                // Similar structure for other directions - 3x size
                 graphics.fillStyle(0x228b22, 1);
-                graphics.fillEllipse(12, 15, 12, 10);
+                graphics.fillEllipse(36, 45, 36, 30);
                 graphics.fillStyle(0x4b0082, 1);
-                graphics.fillRect(7, 11, 10, 10);
+                graphics.fillRect(21, 33, 30, 30);
                 graphics.fillStyle(0x228b22, 1);
-                graphics.fillRect(6, 12, 4, 3);
-                graphics.fillRect(8, 19, 4, 4);
-                graphics.fillRect(12, 19, 4, 4);
-                graphics.fillCircle(12, 8, 5);
+                graphics.fillRect(18, 36, 12, 9);
+                graphics.fillRect(24, 57, 12, 12);
+                graphics.fillRect(36, 57, 12, 12);
+                graphics.fillCircle(36, 24, 15);
                 graphics.fillStyle(0x00ffff, 1);
-                graphics.fillCircle(direction === 'left' ? 14 : 10, 7, 1.5);
+                graphics.fillCircle(direction === 'left' ? 42 : 30, 21, 4.5);
                 break;
         }
     }
@@ -2265,71 +2273,75 @@ class Preloader extends Phaser.Scene {
     drawNecromancer(graphics, direction) {
         switch (direction) {
             case 'down':
-                // Necromancer body
+                // Necromancer body - 3x size
                 graphics.fillStyle(0x2f2f2f, 1);
-                graphics.fillEllipse(12, 15, 11, 9);
+                graphics.fillEllipse(36, 45, 33, 27);
                 
-                // Dark flowing robes
+                // Dark flowing robes - 3x size
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillRect(6, 10, 12, 12);
+                graphics.fillRect(18, 30, 36, 36);
                 
-                // Bone decorations on robes
+                // Bone decorations on robes - 3x size
                 graphics.fillStyle(0xf5f5dc, 1);
-                graphics.fillRect(8, 12, 1, 3);
-                graphics.fillRect(15, 12, 1, 3);
-                graphics.fillRect(11, 16, 2, 1);
+                graphics.fillRect(24, 36, 3, 9);
+                graphics.fillRect(45, 36, 3, 9);
+                graphics.fillRect(33, 48, 6, 3);
                 
-                // Skeletal arms
+                // Skeletal arms - 3x size
                 graphics.fillStyle(0xf5f5dc, 1);
-                graphics.fillRect(4, 12, 3, 2);
-                graphics.fillRect(17, 12, 3, 2);
+                graphics.fillRect(12, 36, 9, 6);
+                graphics.fillRect(51, 36, 9, 6);
                 
-                // Legs hidden in robes
+                // Legs hidden in robes - 3x size
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillRect(8, 19, 4, 4);
-                graphics.fillRect(12, 19, 4, 4);
+                graphics.fillRect(24, 57, 12, 12);
+                graphics.fillRect(36, 57, 12, 12);
                 
-                // Skull head
+                // Skull head - 3x size
                 graphics.fillStyle(0xf5f5dc, 1);
-                graphics.fillCircle(12, 8, 5);
+                graphics.fillCircle(36, 24, 15);
                 
-                // Eye sockets
+                // Eye sockets - 3x size
                 graphics.fillStyle(0x000000, 1);
-                graphics.fillCircle(10, 7, 2);
-                graphics.fillCircle(14, 7, 2);
+                graphics.fillCircle(30, 21, 6);
+                graphics.fillCircle(42, 21, 6);
                 
-                // Glowing red eyes
+                // Glowing red eyes - 3x size
                 graphics.fillStyle(0xff0000, 1);
-                graphics.fillCircle(10, 7, 1);
-                graphics.fillCircle(14, 7, 1);
+                graphics.fillCircle(30, 21, 3);
+                graphics.fillCircle(42, 21, 3);
                 
-                // Dark hood
+                // Dark hood - 3x size
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillEllipse(12, 5, 10, 6);
+                graphics.fillEllipse(36, 15, 30, 18);
                 
-                // Bone staff
+                // Bone staff - 3x size
                 graphics.fillStyle(0xf5f5dc, 1);
-                graphics.fillRect(21, 5, 2, 18);
-                graphics.fillCircle(22, 3, 3);
+                graphics.fillRect(63, 15, 6, 54);
+                graphics.fillCircle(66, 9, 9);
                 graphics.fillStyle(0x000000, 1);
-                graphics.fillCircle(22, 3, 1.5);
+                graphics.fillCircle(66, 9, 4.5);
                 break;
                 
             case 'up':
             case 'left':
             case 'right':
-                // Similar structure
+            case 'downleft':
+            case 'downright':
+            case 'upleft':
+            case 'upright':
+                // Similar structure - 3x size
                 graphics.fillStyle(0x2f2f2f, 1);
-                graphics.fillEllipse(12, 15, 11, 9);
+                graphics.fillEllipse(36, 45, 33, 27);
                 graphics.fillStyle(0x1a1a1a, 1);
-                graphics.fillRect(6, 10, 12, 12);
+                graphics.fillRect(18, 30, 36, 36);
                 graphics.fillStyle(0xf5f5dc, 1);
-                graphics.fillRect(6, 12, 3, 2);
-                graphics.fillRect(8, 19, 4, 4);
-                graphics.fillRect(12, 19, 4, 4);
-                graphics.fillCircle(12, 8, 5);
+                graphics.fillRect(18, 36, 9, 6);
+                graphics.fillRect(24, 57, 12, 12);
+                graphics.fillRect(36, 57, 12, 12);
+                graphics.fillCircle(36, 24, 15);
                 graphics.fillStyle(0xff0000, 1);
-                graphics.fillCircle(direction === 'left' ? 14 : 10, 7, 1);
+                graphics.fillCircle(direction === 'left' ? 42 : 30, 21, 3);
                 break;
         }
     }

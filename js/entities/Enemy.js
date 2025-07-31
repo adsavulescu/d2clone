@@ -818,13 +818,15 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.lastAttack = time;
             
             // Keep attack flag true for a portion of the cooldown
-            this.scene.time.delayedCall(Math.min(500, this.attackCooldown * 0.5), () => {
-                if (this.active && this.state === 'attacking') {
-                    // Still attacking - keep the flag but DON'T clear direction
-                    this.isPerformingAttack = false;
-                    // Keep attackDirection so we maintain facing
-                }
-            });
+            if (this.scene && this.scene.time) {
+                this.scene.time.delayedCall(Math.min(500, this.attackCooldown * 0.5), () => {
+                    if (this.active && this.state === 'attacking') {
+                        // Still attacking - keep the flag but DON'T clear direction
+                        this.isPerformingAttack = false;
+                        // Keep attackDirection so we maintain facing
+                    }
+                });
+            }
             
             // Visual attack effect - only if scene is still valid
             if (this.scene && this.scene.tweens) {
@@ -1380,8 +1382,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         itemSprite.y = this.y;
         itemSprite.setDepth(50);
         
-        // Draw the proper item icon
-        this.drawDroppedItemIcon(itemSprite, item);
+        // Draw the proper item icon using UIManager for consistency
+        if (this.scene.uiManager) {
+            this.scene.uiManager.drawItemIcon(itemSprite, item);
+        }
         
         // Store item data with the sprite
         itemSprite.itemData = item;
@@ -1405,170 +1409,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             yoyo: true,
             repeat: -1
         });
-    }
-    
-    drawDroppedItemIcon(graphics, item) {
-        graphics.clear();
-        
-        const rarityColors = {
-            'normal': 0xffffff,
-            'magic': 0x4444ff,
-            'rare': 0xffff44,
-            'unique': 0x8b4513
-        };
-        const baseColor = rarityColors[item.rarity] || 0xffffff;
-        
-        // Scale icons slightly smaller for ground drops
-        const scale = 0.8;
-        
-        switch (item.type) {
-            case 'potion':
-                if (item.name.includes('Healing')) {
-                    // Red bottle shape
-                    graphics.fillStyle(0xcc0000, 1);
-                    graphics.fillRoundedRect(-6*scale, -8*scale, 12*scale, 16*scale, 2*scale);
-                    graphics.fillStyle(0xff4444, 1);
-                    graphics.fillRoundedRect(-5*scale, -7*scale, 10*scale, 14*scale, 1*scale);
-                    // Cork/cap
-                    graphics.fillStyle(0x8b4513, 1);
-                    graphics.fillRect(-3*scale, -9*scale, 6*scale, 3*scale);
-                } else if (item.name.includes('Mana')) {
-                    // Blue bottle shape
-                    graphics.fillStyle(0x0000cc, 1);
-                    graphics.fillRoundedRect(-6*scale, -8*scale, 12*scale, 16*scale, 2*scale);
-                    graphics.fillStyle(0x4444ff, 1);
-                    graphics.fillRoundedRect(-5*scale, -7*scale, 10*scale, 14*scale, 1*scale);
-                    // Cork/cap
-                    graphics.fillStyle(0x8b4513, 1);
-                    graphics.fillRect(-3*scale, -9*scale, 6*scale, 3*scale);
-                }
-                break;
-                
-            case 'weapon':
-                // Sword icon
-                graphics.fillStyle(baseColor, 1);
-                // Blade
-                graphics.fillRect(-2*scale, -10*scale, 4*scale, 14*scale);
-                // Crossguard
-                graphics.fillRect(-5*scale, -3*scale, 10*scale, 2*scale);
-                // Handle
-                graphics.fillStyle(0x8b4513, 1);
-                graphics.fillRect(-1*scale, 3*scale, 2*scale, 5*scale);
-                // Pommel
-                graphics.fillCircle(0, 9*scale, 2*scale);
-                break;
-                
-            case 'armor':
-                // Chestplate icon
-                graphics.fillStyle(baseColor, 1);
-                // Main body
-                graphics.fillRoundedRect(-6*scale, -6*scale, 12*scale, 12*scale, 2*scale);
-                // Shoulder plates
-                graphics.fillRect(-8*scale, -5*scale, 3*scale, 5*scale);
-                graphics.fillRect(5*scale, -5*scale, 3*scale, 5*scale);
-                // Center detail
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(-1*scale, -5*scale, 2*scale, 10*scale);
-                break;
-                
-            case 'helmet':
-                // Helmet icon
-                graphics.fillStyle(baseColor, 1);
-                // Main helmet shape
-                graphics.fillEllipse(0, -2*scale, 12*scale, 9*scale);
-                // Visor/face guard
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(-5*scale, -3*scale, 10*scale, 5*scale);
-                // Plume/crest
-                graphics.fillStyle(0xaa0000, 1);
-                graphics.fillRect(-1*scale, -8*scale, 2*scale, 5*scale);
-                break;
-                
-            case 'boots':
-                // Boot icon
-                graphics.fillStyle(baseColor, 1);
-                // Boot body
-                graphics.fillRoundedRect(-5*scale, -3*scale, 10*scale, 10*scale, 2*scale);
-                // Sole
-                graphics.fillStyle(0x654321, 1);
-                graphics.fillRect(-6*scale, 5*scale, 12*scale, 2*scale);
-                // Laces
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(-2*scale, -2*scale, 4*scale, 5*scale);
-                break;
-                
-            case 'gloves':
-                // Glove icon
-                graphics.fillStyle(baseColor, 1);
-                // Palm
-                graphics.fillRoundedRect(-5*scale, -2*scale, 10*scale, 6*scale, 2*scale);
-                // Fingers
-                graphics.fillRect(-4*scale, -6*scale, 2*scale, 4*scale);
-                graphics.fillRect(-1*scale, -8*scale, 2*scale, 6*scale);
-                graphics.fillRect(3*scale, -6*scale, 2*scale, 4*scale);
-                // Thumb
-                graphics.fillRect(-6*scale, 0, 3*scale, 3*scale);
-                break;
-                
-            case 'belt':
-                // Belt icon
-                graphics.fillStyle(baseColor, 1);
-                // Belt strap
-                graphics.fillRect(-8*scale, -2*scale, 16*scale, 3*scale);
-                // Buckle
-                graphics.fillStyle(0xffd700, 1);
-                graphics.fillRect(-3*scale, -3*scale, 6*scale, 6*scale);
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(-2*scale, -2*scale, 4*scale, 4*scale);
-                break;
-                
-            case 'ring':
-                // Ring icon
-                graphics.fillStyle(baseColor, 1);
-                // Ring band
-                graphics.lineStyle(3*scale, baseColor, 1);
-                graphics.strokeCircle(0, 0, 5*scale);
-                // Gem
-                graphics.fillStyle(0x00ffff, 1);
-                graphics.fillCircle(0, -5*scale, 2*scale);
-                break;
-                
-            case 'amulet':
-                // Amulet icon
-                graphics.fillStyle(baseColor, 1);
-                // Chain
-                graphics.lineStyle(2*scale, 0x888888, 1);
-                graphics.strokeCircle(0, -6*scale, 6*scale);
-                // Pendant
-                graphics.fillStyle(baseColor, 1);
-                graphics.fillEllipse(0, 2*scale, 6*scale, 10*scale);
-                // Gem in center
-                graphics.fillStyle(0xff00ff, 1);
-                graphics.fillCircle(0, 2*scale, 2*scale);
-                break;
-                
-            case 'shield':
-                // Shield icon
-                graphics.fillStyle(baseColor, 1);
-                // Shield shape
-                graphics.fillRoundedRect(-6*scale, -8*scale, 12*scale, 16*scale, 6*scale);
-                // Boss (center)
-                graphics.fillStyle(0xffd700, 1);
-                graphics.fillCircle(0, 0, 3*scale);
-                // Cross design
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(-1*scale, -6*scale, 2*scale, 12*scale);
-                graphics.fillRect(-5*scale, -1*scale, 10*scale, 2*scale);
-                break;
-                
-            default:
-                // Generic item icon
-                graphics.fillStyle(baseColor, 1);
-                graphics.fillRect(-6*scale, -6*scale, 12*scale, 12*scale);
-                graphics.fillStyle(0x333333, 1);
-                graphics.fillRect(-5*scale, -5*scale, 10*scale, 10*scale);
-                break;
-        }
     }
 }
 

@@ -465,6 +465,7 @@ class WorldGenerator {
                         tileTexture
                     );
                     wall.setDisplaySize(this.tileSize, this.tileSize);
+                    // Physics body size is configured by the static group
                 } else {
                     // Create non-collidable floor tile
                     const tile = this.scene.add.image(worldX, worldY, tileTexture);
@@ -473,6 +474,23 @@ class WorldGenerator {
                 }
             }
         }
+        
+        // Configure all wall bodies for optimal collision
+        this.wallGroup.children.entries.forEach(wall => {
+            if (wall.body) {
+                // Use exact tile size for clean collision boundaries
+                wall.body.setSize(this.tileSize, this.tileSize);
+                wall.body.setOffset(0, 0);
+                
+                // Ensure walls are immovable and have proper physics settings
+                wall.body.immovable = true;
+                wall.body.moves = false;
+                
+                // Enable debug display for walls
+                wall.body.debugShowBody = true;
+                wall.body.debugBodyColor = 0xff0000; // Red for walls
+            }
+        });
         
         return tileGroup;
     }

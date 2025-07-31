@@ -10,12 +10,26 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.setDepth(200); // Ensure player is above everything including town hall
         
         // Update physics body for 3x larger sprites (96x96)
-        this.body.setSize(48, 48); // Collision box slightly smaller than sprite
-        this.body.setOffset(24, 24); // Center the collision box
+        // Use optimal collision box for smooth wall sliding
+        this.body.setSize(32, 32); // Reasonable size - exactly one tile
+        this.body.setOffset(32, 32); // Center the collision box perfectly
         
-        // Disable debug display for this body
-        this.body.debugShowBody = false;
-        this.body.debugShowVelocity = false;
+        // Configure physics for smooth wall sliding - key settings
+        this.body.bounce.set(0); // No bouncing - essential for smooth sliding
+        this.body.friction.set(0); // No friction to prevent sticking
+        this.body.drag.set(0); // No drag - allows clean movement
+        this.body.mass = 1; // Standard mass
+        this.body.immovable = false; // Allow collision resolution
+        this.body.pushable = false; // Prevent other objects from interfering
+        this.body.moves = true; // Ensure body can move
+        
+        // Set collision world bounds
+        this.body.collideWorldBounds = true;
+        
+        // Enable debug display to visualize collision box
+        this.body.debugShowBody = true;
+        this.body.debugShowVelocity = true;
+        this.body.debugBodyColor = 0x00ff00; // Green for player
         this.body.debugBodyColor = 0x000000;
         
         // Movement direction tracking
@@ -715,25 +729,35 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     
     
     update(targetPosition) {
-        let newVelocityX = 0;
-        let newVelocityY = 0;
+        // Store position before movement for debugging
+        
+        // Follow Phaser 3 best practice: reset velocity first, then apply movement
+        this.body.setVelocity(0);
         
         if (targetPosition && Phaser.Math.Distance.Between(this.x, this.y, targetPosition.x, targetPosition.y) > 10) {
             const angle = Phaser.Math.Angle.Between(this.x, this.y, targetPosition.x, targetPosition.y);
-            newVelocityX = Math.cos(angle) * this.speed;
-            newVelocityY = Math.sin(angle) * this.speed;
-            this.setVelocity(newVelocityX, newVelocityY);
+            const velocityX = Math.cos(angle) * this.speed;
+            const velocityY = Math.sin(angle) * this.speed;
+            
+            // Apply movement - Phaser's collision system will handle wall sliding
+            this.body.setVelocity(velocityX, velocityY);
+            
+            // Store intended movement for animation
+            this.lastVelocityX = velocityX;
+            this.lastVelocityY = velocityY;
         } else {
-            this.setVelocity(0);
+            this.lastVelocityX = 0;
+            this.lastVelocityY = 0;
         }
         
-        // Update direction and animation based on movement
-        this.updateDirectionAndAnimation(newVelocityX, newVelocityY);
+        // Update direction and animation based on intended movement
+        this.updateDirectionAndAnimation(this.lastVelocityX, this.lastVelocityY);
         
         this.updatePotionEffects();
         
         this.mana = Math.min(this.maxMana, this.mana + 0.1);
     }
+    
     
     updateDirectionAndAnimation(velocityX, velocityY) {
         const isMoving = Math.abs(velocityX) > 5 || Math.abs(velocityY) > 5;

@@ -29,6 +29,13 @@ class Item {
             }
         };
         
+        // Stat requirements (Diablo 2 style)
+        this.requirements = {
+            strength: 0,
+            dexterity: 0,
+            level: this.level
+        };
+        
         // Equipment slot (null if not equippable)
         this.equipSlot = this.getEquipSlot();
         
@@ -58,30 +65,50 @@ class Item {
         switch (this.type) {
             case 'weapon':
                 this.properties.damage = 5 + (this.level * 2);
+                // Weapons require strength and some dexterity
+                this.requirements.strength = Math.max(8, this.level * 3);
+                this.requirements.dexterity = Math.max(3, this.level);
                 break;
             case 'armor':
                 this.properties.armor = 10 + (this.level * 3);
+                // Heavy armor requires high strength
+                this.requirements.strength = Math.max(12, this.level * 4);
                 break;
             case 'helmet':
                 this.properties.armor = 5 + this.level;
+                // Light strength requirement
+                this.requirements.strength = Math.max(5, this.level * 2);
                 break;
             case 'boots':
                 this.properties.armor = 3 + this.level;
                 this.properties.moveSpeed = 5;
+                // Minimal requirements
+                this.requirements.strength = Math.max(3, this.level);
                 break;
             case 'gloves':
                 this.properties.armor = 2 + this.level;
                 this.properties.attackSpeed = 5;
+                // Dexterity for attack speed
+                this.requirements.dexterity = Math.max(5, this.level * 2);
                 break;
             case 'belt':
                 this.properties.armor = 2 + this.level;
                 this.properties.life = 10 + (this.level * 2);
+                // Light strength requirement
+                this.requirements.strength = Math.max(4, this.level);
+                break;
+            case 'shield':
+                this.properties.armor = 8 + (this.level * 2);
+                // Shields require strength and dexterity
+                this.requirements.strength = Math.max(10, this.level * 3);
+                this.requirements.dexterity = Math.max(5, this.level);
                 break;
             case 'ring':
-                // Rings have various random bonuses
+                // Rings have various random bonuses, no requirements
                 break;
             case 'amulet':
                 this.properties.mana = 10 + (this.level * 2);
+                // No requirements for amulets
                 break;
             case 'potion':
                 this.stackable = true;
@@ -135,43 +162,185 @@ class Item {
         };
     }
     
-    getTooltipText() {
-        let tooltip = [];
-        tooltip.push(`${this.name} (Level ${this.level})`);
-        tooltip.push('');
+    canPlayerUse(player) {
+        // Check if player meets all requirements
+        return (
+            player.level >= this.requirements.level &&
+            player.strength >= this.requirements.strength &&
+            player.dexterity >= this.requirements.dexterity
+        );
+    }
+    
+    getTooltipData(player = null) {
+        // Return structured tooltip data for Diablo 2-style rendering
+        const tooltipData = {
+            name: this.name,
+            rarity: this.rarity,
+            type: this.type,
+            level: this.level,
+            sections: []
+        };
         
+        // Item type and level section
+        tooltipData.sections.push({
+            type: 'header',
+            lines: [
+                { text: this.name, color: this.getRarityColor(), size: 'large' },
+                { text: this.getItemTypeDisplay(), color: '#c0c0c0', size: 'small' }
+            ]
+        });
+        
+        // Core stats section (damage, armor, etc.)
+        const coreStats = [];
         if (this.properties.damage > 0) {
-            tooltip.push(`Damage: ${this.properties.damage}`);
+            coreStats.push({ text: `One-Hand Damage: ${this.properties.damage}`, color: '#ffffff' });
         }
         if (this.properties.armor > 0) {
-            tooltip.push(`Armor: ${this.properties.armor}`);
+            coreStats.push({ text: `Defense: ${this.properties.armor}`, color: '#ffffff' });
         }
         
-        // Add stat bonuses
+        if (coreStats.length > 0) {
+            tooltipData.sections.push({
+                type: 'stats',
+                lines: coreStats
+            });
+        }
+        
+        // Properties section (bonuses) - comes before requirements in Diablo 2
+        const bonuses = [];
         ['strength', 'dexterity', 'vitality', 'energy'].forEach(stat => {
             if (this.properties[stat] > 0) {
-                tooltip.push(`+${this.properties[stat]} ${stat.charAt(0).toUpperCase() + stat.slice(1)}`);
+                bonuses.push({ 
+                    text: `+${this.properties[stat]} ${stat.charAt(0).toUpperCase() + stat.slice(1)}`, 
+                    color: '#8080ff' 
+                });
             }
         });
         
         if (this.properties.life > 0) {
-            tooltip.push(`+${this.properties.life} Life`);
+            bonuses.push({ text: `+${this.properties.life} to Life`, color: '#ff6060' });
         }
         if (this.properties.mana > 0) {
-            tooltip.push(`+${this.properties.mana} Mana`);
+            bonuses.push({ text: `+${this.properties.mana} to Mana`, color: '#6060ff' });
+        }
+        if (this.properties.moveSpeed > 0) {
+            bonuses.push({ text: `+${this.properties.moveSpeed}% Faster Run/Walk`, color: '#c0c0c0' });
+        }
+        if (this.properties.attackSpeed > 0) {
+            bonuses.push({ text: `+${this.properties.attackSpeed}% Increased Attack Speed`, color: '#c0c0c0' });
         }
         
-        // Special item effects
+        // Add resistance bonuses
+        Object.keys(this.properties.resistance).forEach(resistType => {
+            const value = this.properties.resistance[resistType];
+            if (value > 0) {
+                const resistName = resistType.charAt(0).toUpperCase() + resistType.slice(1);
+                bonuses.push({ text: `+${value}% ${resistName} Resist`, color: '#c0c0c0' });
+            }
+        });
+        
+        if (bonuses.length > 0) {
+            tooltipData.sections.push({
+                type: 'bonuses',
+                lines: bonuses
+            });
+        }
+        
+        // Requirements section (comes after bonuses in Diablo 2)
+        const requirements = [];
+        if (this.requirements.level > 1) {
+            const canUseLevel = !player || player.level >= this.requirements.level;
+            requirements.push({ 
+                text: `Level: ${this.requirements.level}`, 
+                color: canUseLevel ? '#ffffff' : '#ff6060' 
+            });
+        }
+        if (this.requirements.strength > 0) {
+            const canUseStr = !player || player.strength >= this.requirements.strength;
+            requirements.push({ 
+                text: `Strength: ${this.requirements.strength}`, 
+                color: canUseStr ? '#ffffff' : '#ff6060' 
+            });
+        }
+        if (this.requirements.dexterity > 0) {
+            const canUseDex = !player || player.dexterity >= this.requirements.dexterity;
+            requirements.push({ 
+                text: `Dexterity: ${this.requirements.dexterity}`, 
+                color: canUseDex ? '#ffffff' : '#ff6060' 
+            });
+        }
+        
+        if (requirements.length > 0) {
+            tooltipData.sections.push({
+                type: 'requirements',
+                title: { text: 'Requirements:', color: '#c0c0c0' },
+                lines: requirements
+            });
+        }
+        
+        // Special effects for potions
         if (this.type === 'potion') {
+            const effects = [];
             if (this.healAmount) {
-                tooltip.push(`Restores ${this.healAmount} Health`);
+                effects.push({ text: `Restores ${this.healAmount} Health`, color: '#ff6060' });
             }
             if (this.manaAmount) {
-                tooltip.push(`Restores ${this.manaAmount} Mana`);
+                effects.push({ text: `Restores ${this.manaAmount} Mana`, color: '#6060ff' });
+            }
+            
+            if (effects.length > 0) {
+                tooltipData.sections.push({
+                    type: 'effects',
+                    lines: effects
+                });
             }
         }
         
-        return tooltip;
+        return tooltipData;
+    }
+    
+    getRarityColor() {
+        const colors = {
+            'normal': '#ffffff',
+            'magic': '#6060ff',
+            'rare': '#ffff00',
+            'unique': '#c08040'
+        };
+        return colors[this.rarity] || '#ffffff';
+    }
+    
+    getItemTypeDisplay() {
+        const typeNames = {
+            'weapon': 'Weapon',
+            'armor': 'Body Armor',
+            'helmet': 'Helm',
+            'boots': 'Boots',
+            'gloves': 'Gloves',
+            'belt': 'Belt',
+            'shield': 'Shield',
+            'ring': 'Ring',
+            'amulet': 'Amulet',
+            'potion': 'Potion'
+        };
+        return typeNames[this.type] || this.type;
+    }
+    
+    getTooltipText() {
+        // Legacy method for backward compatibility
+        const data = this.getTooltipData();
+        let tooltip = [];
+        
+        data.sections.forEach(section => {
+            if (section.title) {
+                tooltip.push(section.title.text);
+            }
+            section.lines.forEach(line => {
+                tooltip.push(line.text);
+            });
+            tooltip.push(''); // Add spacing between sections
+        });
+        
+        return tooltip.filter(line => line !== ''); // Remove empty lines at end
     }
     
     use(player) {
