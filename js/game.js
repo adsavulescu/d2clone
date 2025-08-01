@@ -11,7 +11,7 @@ const config = {
             debug: true  // Enable debug mode to see collision boxes
         }
     },
-    scene: [StartScreen, Preloader, GameScene, EndGameScreen]
+    scene: [StartScreen, Preloader, GameScene, DeathScreen, EndGameScreen]
 };
 
 const game = new Phaser.Game(config);

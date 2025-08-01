@@ -14,6 +14,13 @@ class UIManager {
         this.skillTreePanel = null;
         this.tooltipText = null;
         
+        // Tooltip state for dynamic comparison
+        this.currentHoveredItem = null;
+        this.currentTooltipPosition = { x: 0, y: 0 };
+        
+        // Set up Shift key monitoring for dynamic comparison tooltips
+        this.setupShiftKeyMonitoring();
+        
         // Minimap elements
         this.minimapContainer = null;
         this.minimapBackground = null;
@@ -39,11 +46,39 @@ class UIManager {
     
     setupUI() {
         this.createExperienceBar();
+        this.createStaminaBar();
         this.createHealthManaGlobes();
         this.createPotionHotbar();
         this.createSkillsHotbar();
         this.createMinimap();
-        this.createInfoPanels();
+        this.createOptionsBar();
+        this.createLevelUpButtons();
+    }
+    
+    setupShiftKeyMonitoring() {
+        // Monitor Shift key presses while hovering items
+        this.scene.input.keyboard.on('keydown-SHIFT', () => {
+            if (this.currentHoveredItem) {
+                this.refreshTooltipForComparison();
+            }
+        });
+        
+        this.scene.input.keyboard.on('keyup-SHIFT', () => {
+            if (this.currentHoveredItem) {
+                this.refreshTooltipForComparison();
+            }
+        });
+    }
+    
+    refreshTooltipForComparison() {
+        if (this.currentHoveredItem) {
+            // Refresh the tooltip with current Shift state
+            this.showInventoryItemTooltip(
+                this.currentHoveredItem, 
+                this.currentTooltipPosition.x, 
+                this.currentTooltipPosition.y
+            );
+        }
     }
     
     setupControls() {
@@ -62,28 +97,36 @@ class UIManager {
             this.toggleSkillTree();
         });
         
-        // Keys 1-4 for skills hotbar
-        const key1 = this.scene.input.keyboard.addKey('ONE');
-        const key2 = this.scene.input.keyboard.addKey('TWO');
-        const key3 = this.scene.input.keyboard.addKey('THREE');
-        const key4 = this.scene.input.keyboard.addKey('FOUR');
-        
-        key1.on('down', () => this.useSkillsHotbarSlot(0));
-        key2.on('down', () => this.useSkillsHotbarSlot(1));
-        key3.on('down', () => this.useSkillsHotbarSlot(2));
-        key4.on('down', () => this.useSkillsHotbarSlot(3));
-        
-        // Q and E for potion hotbar
-        this.scene.input.keyboard.on('keydown-Q', () => {
+        // Keys 1-2 for potion hotbar
+        this.scene.input.keyboard.on('keydown-ONE', () => {
             this.usePotionHotbarSlot(0);
         });
-        this.scene.input.keyboard.on('keydown-E', () => {
+        this.scene.input.keyboard.on('keydown-TWO', () => {
             this.usePotionHotbarSlot(1);
+        });
+        
+        // Q/W/E/R for skills hotbar
+        this.scene.input.keyboard.on('keydown-Q', () => {
+            this.useSkillsHotbarSlot(0);
+        });
+        this.scene.input.keyboard.on('keydown-W', () => {
+            this.useSkillsHotbarSlot(1);
+        });
+        this.scene.input.keyboard.on('keydown-E', () => {
+            this.useSkillsHotbarSlot(2);
+        });
+        this.scene.input.keyboard.on('keydown-R', () => {
+            this.useSkillsHotbarSlot(3);
         });
         
         // ESC to close all panels
         this.scene.input.keyboard.on('keydown-ESC', () => {
             this.closeAllPanels();
+        });
+        
+        // T key to toggle walk/run
+        this.scene.input.keyboard.on('keydown-T', () => {
+            this.toggleWalkRun();
         });
     }
     
@@ -112,6 +155,32 @@ class UIManager {
             fontWeight: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
         
+    }
+    
+    createStaminaBar() {
+        const barWidth = 200;
+        const barHeight = 12;
+        const barX = (this.scene.cameras.main.width - barWidth) / 2;
+        const barY = this.scene.cameras.main.height - 25; // Above experience bar
+        
+        // Stamina bar background
+        this.staminaBarBg = this.scene.add.graphics();
+        this.staminaBarBg.fillStyle(0x000000, 1);
+        this.staminaBarBg.fillRect(barX, barY, barWidth, barHeight);
+        this.staminaBarBg.lineStyle(1, 0x666666, 1);
+        this.staminaBarBg.strokeRect(barX, barY, barWidth, barHeight);
+        this.staminaBarBg.setScrollFactor(0).setDepth(1000);
+        
+        // Stamina bar fill
+        this.staminaBar = this.scene.add.graphics();
+        this.staminaBar.setScrollFactor(0).setDepth(1001);
+        
+        // Stamina text (optional - can be hidden for cleaner look)
+        this.staminaText = this.scene.add.text(barX + barWidth/2, barY + barHeight/2, 'STAMINA', {
+            fontSize: '8px',
+            fill: '#cccccc',
+            fontWeight: 'bold'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
     }
     
     createHealthManaGlobes() {
@@ -195,7 +264,7 @@ class UIManager {
         this.potionHotbarBg.setScrollFactor(0).setDepth(1000);
         
         // Create 2 potion slots
-        const potionLabels = ['Q', 'E'];
+        const potionLabels = ['1', '2'];
         for (let i = 0; i < 2; i++) {
             const slotX = hotbarX - slotSpacing/2 + (i * slotSpacing);
             
@@ -242,7 +311,7 @@ class UIManager {
         this.skillsHotbarBg.setScrollFactor(0).setDepth(1000);
         
         // Create 4 skill slots
-        const skillLabels = ['1', '2', '3', '4'];
+        const skillLabels = ['Q', 'W', 'E', 'R'];
         for (let i = 0; i < 4; i++) {
             const slotX = hotbarX - (1.5 * slotSpacing) + (i * slotSpacing);
             
@@ -381,23 +450,373 @@ class UIManager {
         });
     }
     
-    createInfoPanels() {
-        // Character info panel (top-left)
-        this.characterInfo = this.scene.add.text(20, 50, '', {
-            fontSize: '12px',
-            fill: '#ffffff',
-            backgroundColor: 'rgba(42, 24, 16, 0.8)',
-            padding: { x: 10, y: 5 }
-        }).setScrollFactor(0).setDepth(1000);
+    createOptionsBar() {
+        const barWidth = 400;
+        const barHeight = 40;
+        const barX = this.scene.cameras.main.width / 2;
+        const barY = this.scene.cameras.main.height - 90; // Above XP bar
         
-        // Controls info panel (top-left, below character info)
-        this.controlsInfo = this.scene.add.text(20, 150, 
-            'I - Inventory\nC - Character\nS - Skills\n1-4 - Skills\nQ/E - Potions\nLMB/MMB/RMB - Mouse Actions\nDrag item to world - Drop', {
+        // Background panel (Diablo 2 style)
+        this.optionsBarBg = this.scene.add.graphics();
+        this.optionsBarBg.fillStyle(0x2a1810, 0.9);
+        this.optionsBarBg.fillRoundedRect(barX - barWidth/2, barY - barHeight/2, barWidth, barHeight, 8);
+        this.optionsBarBg.lineStyle(2, 0x8b4513, 1);
+        this.optionsBarBg.strokeRoundedRect(barX - barWidth/2, barY - barHeight/2, barWidth, barHeight, 8);
+        this.optionsBarBg.setScrollFactor(0).setDepth(999);
+        
+        // Create option buttons
+        const buttonWidth = 60;
+        const buttonHeight = 28;
+        const buttonSpacing = 70;
+        const totalButtons = 5;
+        const startX = barX - ((totalButtons - 1) * buttonSpacing) / 2;
+        
+        this.optionButtons = [];
+        
+        // Inventory button
+        this.createOptionButton(startX, barY, buttonWidth, buttonHeight, 'INV', 'inventory');
+        
+        // Character button  
+        this.createOptionButton(startX + buttonSpacing, barY, buttonWidth, buttonHeight, 'CHAR', 'character');
+        
+        // Skills button
+        this.createOptionButton(startX + buttonSpacing * 2, barY, buttonWidth, buttonHeight, 'SKILL', 'skills');
+        
+        // Walk/Run toggle button
+        this.createOptionButton(startX + buttonSpacing * 3, barY, buttonWidth, buttonHeight, 'RUN', 'walkrun');
+        
+        // Help button
+        this.createOptionButton(startX + buttonSpacing * 4, barY, buttonWidth, buttonHeight, 'HELP', 'help');
+        
+        // Help panel (initially hidden)
+        this.createHelpPanel();
+    }
+    
+    createOptionButton(x, y, width, height, text, action) {
+        // Button background
+        const button = this.scene.add.graphics();
+        button.fillStyle(0x4a3428, 1);
+        button.fillRoundedRect(x - width/2, y - height/2, width, height, 4);
+        button.lineStyle(1, 0x8b4513, 1);
+        button.strokeRoundedRect(x - width/2, y - height/2, width, height, 4);
+        button.setScrollFactor(0).setDepth(1000);
+        
+        // Button text
+        const buttonText = this.scene.add.text(x, y, text, {
             fontSize: '10px',
-            fill: '#cccccc',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            padding: { x: 5, y: 3 }
-        }).setScrollFactor(0).setDepth(1000);
+            color: '#d4af37',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 1
+        });
+        buttonText.setOrigin(0.5, 0.5);
+        buttonText.setScrollFactor(0).setDepth(1001);
+        
+        // Interactive zone
+        const zone = this.scene.add.zone(x, y, width, height);
+        zone.setInteractive();
+        zone.setScrollFactor(0).setDepth(1001);
+        
+        // Button hover effects
+        zone.on('pointerover', () => {
+            button.clear();
+            button.fillStyle(0x5a4438, 1);
+            button.fillRoundedRect(x - width/2, y - height/2, width, height, 4);
+            button.lineStyle(2, 0xd4af37, 1);
+            button.strokeRoundedRect(x - width/2, y - height/2, width, height, 4);
+            buttonText.setColor('#ffffff');
+        });
+        
+        zone.on('pointerout', () => {
+            button.clear();
+            button.fillStyle(0x4a3428, 1);
+            button.fillRoundedRect(x - width/2, y - height/2, width, height, 4);
+            button.lineStyle(1, 0x8b4513, 1);
+            button.strokeRoundedRect(x - width/2, y - height/2, width, height, 4);
+            buttonText.setColor('#d4af37');
+        });
+        
+        // Button click handlers
+        zone.on('pointerdown', () => {
+            this.handleOptionButtonClick(action, buttonText);
+        });
+        
+        this.optionButtons.push({ button, text: buttonText, zone, action });
+    }
+    
+    handleOptionButtonClick(action, buttonText) {
+        switch(action) {
+            case 'inventory':
+                this.toggleInventory();
+                break;
+            case 'character':
+                this.toggleCharacterSheet();
+                break;
+            case 'skills':
+                this.toggleSkillTree();
+                break;
+            case 'walkrun':
+                this.toggleWalkRun();
+                this.updateWalkRunButton();
+                break;
+            case 'help':
+                this.toggleHelp();
+                break;
+        }
+    }
+    
+    updateWalkRunButton() {
+        const walkRunButton = this.optionButtons.find(btn => btn.action === 'walkrun');
+        if (walkRunButton) {
+            const isWalking = this.scene.player.isWalking;
+            walkRunButton.text.setText(isWalking ? 'WALK' : 'RUN');
+        }
+    }
+    
+    createHelpPanel() {
+        this.helpPanelOpen = false;
+        this.helpPanel = null;
+    }
+    
+    toggleHelp() {
+        if (this.helpPanelOpen) {
+            this.closeHelp();
+        } else {
+            this.openHelp();
+        }
+    }
+    
+    openHelp() {
+        this.closeAllPanels();
+        
+        const panelWidth = 380;
+        const panelHeight = 480;
+        const centerX = this.scene.cameras.main.width / 2;
+        const centerY = this.scene.cameras.main.height / 2;
+        
+        // Background
+        this.helpPanel = this.scene.add.graphics();
+        this.helpPanel.fillStyle(0x2a1810, 0.95);
+        this.helpPanel.fillRoundedRect(centerX - panelWidth/2, centerY - panelHeight/2, panelWidth, panelHeight, 10);
+        this.helpPanel.lineStyle(3, 0x8b4513, 1);
+        this.helpPanel.strokeRoundedRect(centerX - panelWidth/2, centerY - panelHeight/2, panelWidth, panelHeight, 10);
+        this.helpPanel.setScrollFactor(0).setDepth(2000);
+        
+        // Title
+        const title = this.scene.add.text(centerX, centerY - panelHeight/2 + 30, 'CONTROLS', {
+            fontSize: '20px',
+            color: '#d4af37',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        title.setOrigin(0.5, 0.5);
+        title.setScrollFactor(0).setDepth(2001);
+        
+        // Help text with updated keybinds
+        const helpText = this.scene.add.text(centerX, centerY - 30, 
+            'MOVEMENT:\n' +
+            '  Left Click - Move to location\n' +
+            '  Hold Left Click - Continuous movement\n' +
+            '  T - Toggle Walk/Run\n\n' +
+            'COMBAT:\n' +
+            '  Right Click - Cast spell (default: Fireball)\n' +
+            '  Q/W/E/R - Use assigned skills\n' +
+            '  1/2 - Use potions\n\n' +
+            'INTERFACE:\n' +
+            '  I - Toggle Inventory\n' +
+            '  C - Toggle Character Sheet\n' +
+            '  S - Toggle Skills Tree\n' +
+            '  ESC - Close all panels\n\n' +
+            'ITEMS:\n' +
+            '  Drag & Drop - Move items\n' +
+            '  Right Click - Quick equip/use\n' +
+            '  Drop on world - Discard item', {
+            fontSize: '11px',
+            color: '#cccccc',
+            fontFamily: 'serif',
+            align: 'left',
+            lineSpacing: 3,
+            wordWrap: { width: panelWidth - 40 }
+        });
+        helpText.setOrigin(0.5, 0.5);
+        helpText.setScrollFactor(0).setDepth(2001);
+        
+        // Close button
+        const closeButton = this.scene.add.text(centerX, centerY + panelHeight/2 - 30, 'CLOSE', {
+            fontSize: '14px',
+            color: '#d4af37',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 1,
+            backgroundColor: '#4a3428',
+            padding: { x: 10, y: 5 }
+        });
+        closeButton.setOrigin(0.5, 0.5);
+        closeButton.setScrollFactor(0).setDepth(2001);
+        closeButton.setInteractive();
+        
+        closeButton.on('pointerover', () => {
+            closeButton.setColor('#ffffff');
+        });
+        closeButton.on('pointerout', () => {
+            closeButton.setColor('#d4af37');
+        });
+        closeButton.on('pointerdown', () => {
+            this.closeHelp();
+        });
+        
+        // Store references for cleanup
+        this.helpPanelElements = [this.helpPanel, title, helpText, closeButton];
+        this.helpPanelOpen = true;
+    }
+    
+    closeHelp() {
+        if (this.helpPanelElements) {
+            this.helpPanelElements.forEach(element => {
+                if (element && element.destroy) {
+                    element.destroy();
+                }
+            });
+            this.helpPanelElements = null;
+        }
+        this.helpPanelOpen = false;
+    }
+    
+    createLevelUpButtons() {
+        const optionsBarY = this.scene.cameras.main.height - 90; // Same Y as options bar
+        const buttonWidth = 80;
+        const buttonHeight = 32;
+        
+        // Stats button (left side of options bar)
+        const statsButtonX = this.scene.cameras.main.width / 2 - 250;
+        this.statsButton = this.createLevelUpButton(statsButtonX, optionsBarY, buttonWidth, buttonHeight, 'STATS', 'stats');
+        
+        // Skills button (right side of options bar)
+        const skillsButtonX = this.scene.cameras.main.width / 2 + 250;
+        this.skillsButton = this.createLevelUpButton(skillsButtonX, optionsBarY, buttonWidth, buttonHeight, 'SKILLS', 'skills');
+        
+        // Initially hidden
+        this.statsButton.container.setVisible(false);
+        this.skillsButton.container.setVisible(false);
+    }
+    
+    createLevelUpButton(x, y, width, height, text, type) {
+        // Button background with pulsing glow effect
+        const button = this.scene.add.graphics();
+        button.fillStyle(0x4a3428, 1);
+        button.fillRoundedRect(x - width/2, y - height/2, width, height, 6);
+        button.lineStyle(2, 0xd4af37, 1);
+        button.strokeRoundedRect(x - width/2, y - height/2, width, height, 6);
+        button.setScrollFactor(0).setDepth(999);
+        
+        // Glowing border effect
+        const glow = this.scene.add.graphics();
+        glow.lineStyle(4, 0xffff00, 0.6);
+        glow.strokeRoundedRect(x - width/2 - 2, y - height/2 - 2, width + 4, height + 4, 8);
+        glow.setScrollFactor(0).setDepth(998);
+        
+        // Button text
+        const buttonText = this.scene.add.text(x, y, text, {
+            fontSize: '12px',
+            color: '#ffff00',
+            fontFamily: 'serif',
+            fontWeight: 'bold',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        buttonText.setOrigin(0.5, 0.5);
+        buttonText.setScrollFactor(0).setDepth(1001);
+        
+        // Interactive zone
+        const zone = this.scene.add.zone(x, y, width, height);
+        zone.setInteractive();
+        zone.setScrollFactor(0).setDepth(1001);
+        
+        // Pulsing animation for the glow
+        this.scene.tweens.add({
+            targets: glow,
+            alpha: 0.3,
+            duration: 800,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+        
+        // Click handler
+        zone.on('pointerdown', () => {
+            if (type === 'stats') {
+                this.openCharacterSheet();
+                this.hideStatsButton();
+            } else if (type === 'skills') {
+                this.openSkillTree();
+                this.hideSkillsButton();
+            }
+        });
+        
+        // Hover effects
+        zone.on('pointerover', () => {
+            buttonText.setScale(1.1);
+            glow.setAlpha(0.8);
+        });
+        
+        zone.on('pointerout', () => {
+            buttonText.setScale(1.0);
+            glow.setAlpha(0.6);
+        });
+        
+        // Container for easy management
+        const container = this.scene.add.container(0, 0, [glow, button, buttonText]);
+        container.setDepth(998);
+        
+        return {
+            container: container,
+            button: button,
+            text: buttonText,
+            glow: glow,
+            zone: zone,
+            type: type
+        };
+    }
+    
+    showStatsButton() {
+        if (this.statsButton) {
+            this.statsButton.container.setVisible(true);
+        }
+    }
+    
+    hideStatsButton() {
+        if (this.statsButton) {
+            this.statsButton.container.setVisible(false);
+        }
+    }
+    
+    showSkillsButton() {
+        if (this.skillsButton) {
+            this.skillsButton.container.setVisible(true);
+        }
+    }
+    
+    hideSkillsButton() {
+        if (this.skillsButton) {
+            this.skillsButton.container.setVisible(false);
+        }
+    }
+    
+    updateLevelUpButtons() {
+        // Show stats button if player has stat points
+        if (this.player.statPoints > 0) {
+            this.showStatsButton();
+        } else {
+            this.hideStatsButton();
+        }
+        
+        // Show skills button if player has skill points
+        if (this.player.skillPoints > 0) {
+            this.showSkillsButton();
+        } else {
+            this.hideSkillsButton();
+        }
     }
     
     createMinimap() {
@@ -539,10 +958,12 @@ class UIManager {
     
     updateUI() {
         this.updateExperienceBar();
+        this.updateStaminaBar();
         this.updateHealthManaGlobes();
-        this.updateCharacterInfo();
         this.updateAllHotbars();
         this.updateMinimap();
+        this.updateWalkRunButton();
+        this.updateLevelUpButtons();
     }
     
     updateExperienceBar() {
@@ -551,13 +972,42 @@ class UIManager {
         const barX = (this.scene.cameras.main.width - barWidth) / 2;
         const barY = this.scene.cameras.main.height - 50; // Move up slightly to match createExperienceBar
         
-        const expPercent = this.player.experience / this.player.experienceToNext;
+        // Safety checks to prevent NaN
+        const safeExperience = this.player.experience || 0;
+        const safeExperienceToNext = this.player.experienceToNext || 100;
+        const expPercent = Math.min(1, Math.max(0, safeExperience / safeExperienceToNext));
         
         this.expBar.clear();
         this.expBar.fillStyle(0x0088ff, 0.8);
         this.expBar.fillRect(barX + 2, barY + 2, (barWidth - 4) * expPercent, barHeight - 4);
         
-        this.expText.setText(`${this.player.experience} / ${this.player.experienceToNext}`);
+        this.expText.setText(`${safeExperience} / ${safeExperienceToNext}`);
+    }
+    
+    updateStaminaBar() {
+        const barWidth = 200;
+        const barHeight = 12;
+        const barX = (this.scene.cameras.main.width - barWidth) / 2;
+        const barY = this.scene.cameras.main.height - 25;
+        
+        const staminaPercent = this.player.stamina / this.player.maxStamina;
+        
+        this.staminaBar.clear();
+        
+        // Color changes based on stamina level (like Diablo 2)
+        let barColor = 0x00ff00; // Green when full
+        if (staminaPercent < 0.5) {
+            barColor = 0xffff00; // Yellow when half
+        }
+        if (staminaPercent < 0.25) {
+            barColor = 0xff0000; // Red when low
+        }
+        
+        this.staminaBar.fillStyle(barColor, 0.8);
+        this.staminaBar.fillRect(barX + 1, barY + 1, (barWidth - 2) * staminaPercent, barHeight - 2);
+        
+        // Update text to show current/max stamina
+        this.staminaText.setText(`${Math.floor(this.player.stamina)}/${this.player.maxStamina}`);
     }
     
     updateHealthManaGlobes() {
@@ -615,15 +1065,6 @@ class UIManager {
         }
     }
     
-    updateCharacterInfo() {
-        const info = [
-            `Level: ${this.player.level}`,
-            `Stat Points: ${this.player.statPoints}`,
-            `Skill Points: ${this.player.skillPoints}`
-        ];
-        
-        this.characterInfo.setText(info.join('\n'));
-    }
     
     updateAllHotbars() {
         this.updatePotionHotbar();
@@ -1540,7 +1981,7 @@ class UIManager {
                 // Tooltip events (only when no item on cursor)
                 equippedContainer.on('pointerover', () => {
                     if (!this.isItemOnCursor) {
-                        this.showInventoryItemTooltip(equippedItem, equipSlot.x, equipSlot.y - 30);
+                        this.showEquippedItemTooltip(equippedItem, equipSlot.x, equipSlot.y - 30);
                     }
                 });
                 equippedContainer.on('pointerout', () => {
@@ -1720,11 +2161,177 @@ class UIManager {
     showInventoryItemTooltip(item, x, y) {
         this.hideTooltip();
         
-        // Get structured tooltip data with player context
-        const tooltipData = item.getTooltipData(this.player);
+        // Track currently hovered item and position for dynamic Shift detection
+        this.currentHoveredItem = item;
+        this.currentTooltipPosition = { x, y };
         
-        // Create Diablo 2-style tooltip container that follows mouse
+        // Check if Shift is held for comparison mode
+        const shiftKey = this.scene.input.keyboard.addKey('SHIFT');
+        const shiftHeld = shiftKey.isDown;
+        
+        // Show comparison tooltip if Shift is held and item is equippable
+        if (shiftHeld && item.equipSlot) {
+            // Try to show comparison tooltip
+            this.showComparisonTooltip(item);
+        } else {
+            // Get structured tooltip data with player context
+            const tooltipData = item.getTooltipData(this.player);
+            
+            // Create Diablo 2-style tooltip container that follows mouse
+            this.createMouseFollowingTooltip(tooltipData);
+        }
+    }
+    
+    showEquippedItemTooltip(item, x, y) {
+        this.hideTooltip();
+        
+        // For equipped items, never show comparison - just regular tooltip
+        const tooltipData = item.getTooltipData(this.player);
         this.createMouseFollowingTooltip(tooltipData);
+    }
+    
+    showComparisonTooltip(item) {
+        // Find the equipped item in the same slot
+        const equippedItem = this.getEquippedItemForSlot(item.equipSlot);
+        
+        if (!equippedItem) {
+            // No equipped item to compare - show normal tooltip
+            const tooltipData = item.getTooltipData(this.player);
+            this.createMouseFollowingTooltip(tooltipData);
+            return;
+        }
+        
+        // Get tooltip data for both items
+        const newItemData = item.getTooltipData(this.player);
+        const equippedItemData = equippedItem.getTooltipData(this.player);
+        
+        // Create side-by-side comparison tooltip using consistent styling
+        this.createComparisonTooltipConsistent(newItemData, equippedItemData);
+    }
+    
+    getEquippedItemForSlot(slot) {
+        // Return the currently equipped item for the given slot
+        if (!this.player.equipment || !slot) {
+            return null;
+        }
+        
+        return this.player.equipment[slot] || null;
+    }
+    
+    createComparisonTooltip(leftTooltipData, rightTooltipData) {
+        const container = this.scene.add.container(0, 0);
+        container.setScrollFactor(0).setDepth(3000);
+        
+        const padding = 12;
+        const tooltipSpacing = 20; // Space between the two tooltips
+        
+        // Create left tooltip (new item)
+        const leftTooltip = this.createSingleTooltipPanel(leftTooltipData, padding);
+        leftTooltip.titleText = 'New Item'; // Add identifier
+        
+        // Create right tooltip (equipped item)  
+        const rightTooltip = this.createSingleTooltipPanel(rightTooltipData, padding);
+        rightTooltip.titleText = 'Equipped';
+        
+        // Position tooltips side by side
+        const leftWidth = leftTooltip.width;
+        const rightWidth = rightTooltip.width;
+        const totalWidth = leftWidth + rightWidth + tooltipSpacing;
+        
+        leftTooltip.x = -totalWidth/2 + leftWidth/2;
+        rightTooltip.x = -totalWidth/2 + leftWidth + tooltipSpacing + rightWidth/2;
+        
+        // Add comparison indicators
+        this.addComparisonIndicators(leftTooltip, rightTooltip, leftTooltipData, rightTooltipData);
+        
+        container.add([leftTooltip, rightTooltip]);
+        
+        // Store dimensions for positioning
+        this.tooltipWidth = totalWidth;
+        this.tooltipHeight = Math.max(leftTooltip.height, rightTooltip.height);
+        
+        // Position and make it follow mouse
+        this.updateTooltipPosition(container);
+        
+        this.tooltipFollowCallback = (pointer) => {
+            this.updateTooltipPosition(container);
+        };
+        
+        this.scene.input.on('pointermove', this.tooltipFollowCallback);
+        this.tooltipContainer = container;
+    }
+    
+    createSingleTooltipPanel(tooltipData, padding) {
+        const panel = this.scene.add.container(0, 0);
+        
+        // Calculate dimensions first
+        let maxWidth = 0;
+        let currentY = padding;
+        
+        const textElements = [];
+        
+        tooltipData.sections.forEach((section, sectionIndex) => {
+            if (sectionIndex > 0) currentY += 8; // Section spacing
+            
+            section.lines.forEach(line => {
+                const textStyle = {
+                    fontSize: line.size || '12px',
+                    fill: line.color || '#ffffff',
+                    fontWeight: line.bold ? 'bold' : 'normal',
+                    fontFamily: 'serif'
+                };
+                
+                const text = this.scene.add.text(0, currentY, line.text, textStyle);
+                text.setOrigin(0.5, 0);
+                textElements.push(text);
+                
+                maxWidth = Math.max(maxWidth, text.width);
+                currentY += text.height + 2;
+            });
+        });
+        
+        const tooltipWidth = maxWidth + (padding * 2);
+        const tooltipHeight = currentY + padding;
+        
+        // Create background
+        const background = this.scene.add.graphics();
+        background.fillStyle(0x000000, 0.9);
+        background.fillRect(-tooltipWidth/2, 0, tooltipWidth, tooltipHeight);
+        background.lineStyle(2, 0x8b6914, 1);
+        background.strokeRect(-tooltipWidth/2, 0, tooltipWidth, tooltipHeight);
+        background.lineStyle(1, 0x4a3c28, 1);
+        background.strokeRect(-tooltipWidth/2 + 1, 1, tooltipWidth - 2, tooltipHeight - 2);
+        
+        panel.add([background, ...textElements]);
+        
+        // Store dimensions
+        panel.width = tooltipWidth;
+        panel.height = tooltipHeight;
+        
+        return panel;
+    }
+    
+    addComparisonIndicators(leftPanel, rightPanel, leftData, rightData) {
+        // Add visual indicators to show which item has better stats
+        // This is a simplified version - could be expanded to compare specific stats
+        
+        // Add "NEW" indicator to left panel
+        const newIndicator = this.scene.add.text(0, -15, '[ NEW ]', {
+            fontSize: '10px',
+            fill: '#00ff00',
+            fontWeight: 'bold',
+            fontFamily: 'serif'
+        }).setOrigin(0.5);
+        leftPanel.add(newIndicator);
+        
+        // Add "EQUIPPED" indicator to right panel
+        const equippedIndicator = this.scene.add.text(0, -15, '[ EQUIPPED ]', {
+            fontSize: '10px', 
+            fill: '#ffaa00',
+            fontWeight: 'bold',
+            fontFamily: 'serif'
+        }).setOrigin(0.5);
+        rightPanel.add(equippedIndicator);
     }
     
     createDiablo2Tooltip(tooltipData, x, y) {
@@ -1980,6 +2587,153 @@ class UIManager {
         
         container.setPosition(x, y);
     }
+    
+    createComparisonTooltipConsistent(leftTooltipData, rightTooltipData) {
+        // Add distinguishing headers
+        leftTooltipData.sections.unshift({
+            lines: [{ text: 'NEW ITEM', color: '#ffff00', size: 'large' }]
+        });
+        
+        rightTooltipData.sections.unshift({
+            lines: [{ text: 'EQUIPPED', color: '#888888', size: 'large' }]
+        });
+        
+        // Create both tooltips using the exact same method as regular tooltips
+        const leftTooltip = this.createSingleTooltipWithSameStyle(leftTooltipData);
+        const rightTooltip = this.createSingleTooltipWithSameStyle(rightTooltipData);
+        
+        // Position tooltips side by side
+        const spacing = 20;
+        const pointer = this.scene.input.activePointer;
+        const baseX = pointer.x;
+        const baseY = pointer.y - 50;
+        
+        // Calculate dimensions after creation
+        const leftBounds = leftTooltip.getBounds();
+        const rightBounds = rightTooltip.getBounds();
+        
+        // Position side by side
+        leftTooltip.setPosition(baseX - leftBounds.width/2 - spacing/2, baseY);
+        rightTooltip.setPosition(baseX + rightBounds.width/2 + spacing/2, baseY);
+        
+        // Store references for cleanup (main container holds both)
+        this.tooltipContainer = this.scene.add.container();
+        this.tooltipContainer.add([leftTooltip, rightTooltip]);
+        this.tooltipContainer.setScrollFactor(0).setDepth(3000);
+        
+        // Set up mouse following for both tooltips
+        this.tooltipFollowCallback = (pointer) => {
+            const newX = pointer.x;
+            const newY = pointer.y - 50;
+            leftTooltip.setPosition(newX - leftBounds.width/2 - spacing/2, newY);
+            rightTooltip.setPosition(newX + rightBounds.width/2 + spacing/2, newY);
+        };
+        
+        this.scene.input.on('pointermove', this.tooltipFollowCallback);
+    }
+    
+    createSingleTooltipWithSameStyle(tooltipData) {
+        // This method uses the EXACT same logic as createMouseFollowingTooltip
+        const container = this.scene.add.container(0, 0);
+        container.setScrollFactor(0).setDepth(3000);
+        
+        // Calculate tooltip dimensions
+        let maxWidth = 0;
+        let totalHeight = 0;
+        const lineHeight = 14;
+        const sectionSpacing = 6;
+        const padding = 8;
+        
+        // First pass: calculate dimensions
+        let currentY = padding;
+        tooltipData.sections.forEach((section, sectionIndex) => {
+            if (sectionIndex > 0) {
+                currentY += sectionSpacing;
+            }
+            
+            if (section.title) {
+                const tempText = this.scene.add.text(0, 0, section.title.text, {
+                    fontSize: '11px',
+                    fill: section.title.color,
+                    fontFamily: 'Arial',
+                    fontStyle: 'bold'
+                });
+                maxWidth = Math.max(maxWidth, tempText.width);
+                tempText.destroy();
+                currentY += lineHeight;
+            }
+            
+            section.lines.forEach(line => {
+                const fontSize = line.size === 'large' ? '14px' : 
+                               line.size === 'small' ? '10px' : '11px';
+                
+                const tempText = this.scene.add.text(0, 0, line.text, {
+                    fontSize: fontSize,
+                    fill: line.color,
+                    fontFamily: 'Arial',
+                    fontStyle: line.size === 'large' ? 'bold' : 'normal'
+                });
+                maxWidth = Math.max(maxWidth, tempText.width);
+                tempText.destroy();
+                currentY += (line.size === 'large' ? 16 : lineHeight);
+            });
+        });
+        
+        totalHeight = currentY + padding;
+        
+        // Create background and border (exactly like original)
+        const background = this.scene.add.graphics();
+        background.fillStyle(0x000000, 0.95); // Dark background
+        background.fillRect(-maxWidth/2 - padding, 0, maxWidth + (padding * 2), totalHeight);
+        
+        // Add golden border (Diablo 2 style)
+        background.lineStyle(2, 0xd4af37, 1); // Gold border
+        background.strokeRect(-maxWidth/2 - padding, 0, maxWidth + (padding * 2), totalHeight);
+        container.add(background);
+        
+        // Second pass: create actual text elements
+        currentY = padding;
+        const elements = [];
+        
+        tooltipData.sections.forEach((section, sectionIndex) => {
+            if (sectionIndex > 0) {
+                currentY += sectionSpacing;
+            }
+            
+            if (section.title) {
+                const titleText = this.scene.add.text(0, currentY, section.title.text, {
+                    fontSize: '11px',
+                    fill: section.title.color,
+                    fontFamily: 'Arial',
+                    fontStyle: 'bold'
+                }).setOrigin(0.5, 0);
+                
+                elements.push(titleText);
+                currentY += lineHeight;
+            }
+            
+            section.lines.forEach(line => {
+                const fontSize = line.size === 'large' ? '14px' : 
+                               line.size === 'small' ? '10px' : '11px';
+                
+                const text = this.scene.add.text(0, currentY, line.text, {
+                    fontSize: fontSize,
+                    fill: line.color,
+                    fontFamily: 'Arial',
+                    fontStyle: line.size === 'large' ? 'bold' : 'normal'
+                }).setOrigin(0.5, 0);
+                
+                elements.push(text);
+                currentY += (line.size === 'large' ? 16 : lineHeight);
+            });
+        });
+        
+        // Add all text elements to container
+        elements.forEach(element => container.add(element));
+        
+        return container;
+    }
+    
     
     toggleCharacterSheet() {
         if (this.characterSheetOpen) {
@@ -2365,8 +3119,8 @@ class UIManager {
     }
     
     createSkillGrid(panelX, panelY) {
-        const gridStartX = panelX + 50;
-        const gridStartY = panelY + 120;
+        const gridStartX = panelX + 70; // Adjusted from 60 to 70 for better alignment with tabs
+        const gridStartY = panelY + 160; // Moved down from 120 to 160 for more space
         const skillSize = 48;
         const skillSpacing = 60;
         const skillsPerRow = 10;
@@ -2375,13 +3129,14 @@ class UIManager {
         const skillCategories = this.getSkillsByTab();
         const currentSkills = skillCategories[this.currentSkillTab] || [];
         
-        // Display available skill points
-        const skillPointsText = this.scene.add.text(gridStartX, gridStartY - 40, 
+        // Display available skill points with padding (no border, just spacing)
+        const skillPointsText = this.scene.add.text(gridStartX, gridStartY - 60, 
             `Skill Points: ${this.player.skillPoints}`, {
             fontSize: '14px',
             fill: '#ffff00',
             fontWeight: 'bold'
         }).setScrollFactor(0).setDepth(2001);
+        
         this.skillTreePanelElements.push(skillPointsText);
         
         
@@ -2423,42 +3178,79 @@ class UIManager {
                 this.skillTreePanelElements.push(levelCounter);
             }
             
-            // Make skill interactive with drag capability
-            const skillZone = this.scene.add.zone(x, y, skillSize, skillSize)
-                .setScrollFactor(0).setDepth(2003).setInteractive({ draggable: isLearned });
+            // Plus button for upgrading skills (bottom-left corner) - always visible
+            const plusButtonSize = 12;
+            const plusButtonX = x - skillSize/2 + plusButtonSize/2 + 2;
+            const plusButtonY = y + skillSize/2 - plusButtonSize/2 - 2;
             
-            // Click to upgrade skill
-            skillZone.on('pointerdown', () => {
-                if (canUpgrade) {
+            // Determine button colors based on availability
+            const isAvailable = canUpgrade;
+            const bgColor = isAvailable ? 0x2a4a2a : 0x3a3a3a; // Green or gray background
+            const borderColor = isAvailable ? 0x4a8a4a : 0x5a5a5a; // Lighter green or gray border
+            const textColor = isAvailable ? '#ffffff' : '#888888'; // White or gray text
+            
+            // Plus button background (square)
+            const plusBg = this.scene.add.graphics();
+            plusBg.fillStyle(bgColor, 0.9);
+            plusBg.lineStyle(1, borderColor, 1);
+            plusBg.fillRect(plusButtonX - plusButtonSize/2, plusButtonY - plusButtonSize/2, plusButtonSize, plusButtonSize);
+            plusBg.strokeRect(plusButtonX - plusButtonSize/2, plusButtonY - plusButtonSize/2, plusButtonSize, plusButtonSize);
+            plusBg.setScrollFactor(0).setDepth(2004);
+            
+            // Plus symbol
+            const plusSymbol = this.scene.add.text(plusButtonX, plusButtonY, '+', {
+                fontSize: '10px',
+                fill: textColor,
+                fontWeight: 'bold'
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(2005);
+            
+            // Plus button interaction zone (only interactive if available)
+            const plusZone = this.scene.add.zone(plusButtonX, plusButtonY, plusButtonSize, plusButtonSize)
+                .setScrollFactor(0).setDepth(2005);
+            
+            if (isAvailable) {
+                plusZone.setInteractive();
+                
+                // Plus button click handler
+                plusZone.on('pointerdown', (pointer, localX, localY, event) => {
+                    event.stopPropagation(); // Prevent skill drag from triggering
                     if (this.player.upgradeSkill(skillData.name)) {
                         this.closeSkillTree();
                         this.openSkillTree(); // Refresh the panel
                     }
-                }
-            });
-            
-            // Hover effects and tooltips
-            skillZone.on('pointerover', () => {
-                if (canUpgrade) {
-                    skillBg.clear();
-                    skillBg.fillStyle(0x5a4020, 1);
-                    skillBg.fillRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
-                    skillBg.lineStyle(2, 0xffff00, 1);
-                    skillBg.strokeRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
-                }
+                });
                 
+                // Plus button hover effects
+                plusZone.on('pointerover', () => {
+                    plusBg.clear();
+                    plusBg.fillStyle(0x4a6a4a, 0.9); // Brighter green on hover
+                    plusBg.lineStyle(1, 0x6aaa6a, 1);
+                    plusBg.fillRect(plusButtonX - plusButtonSize/2, plusButtonY - plusButtonSize/2, plusButtonSize, plusButtonSize);
+                    plusBg.strokeRect(plusButtonX - plusButtonSize/2, plusButtonY - plusButtonSize/2, plusButtonSize, plusButtonSize);
+                });
+                
+                plusZone.on('pointerout', () => {
+                    plusBg.clear();
+                    plusBg.fillStyle(0x2a4a2a, 0.9); // Back to normal green
+                    plusBg.lineStyle(1, 0x4a8a4a, 1);
+                    plusBg.fillRect(plusButtonX - plusButtonSize/2, plusButtonY - plusButtonSize/2, plusButtonSize, plusButtonSize);
+                    plusBg.strokeRect(plusButtonX - plusButtonSize/2, plusButtonY - plusButtonSize/2, plusButtonSize, plusButtonSize);
+                });
+            }
+            
+            this.skillTreePanelElements.push(plusBg, plusSymbol, plusZone);
+            
+            // Make skill interactive with drag capability (always draggable if learned)
+            const skillZone = this.scene.add.zone(x, y, skillSize, skillSize)
+                .setScrollFactor(0).setDepth(2003).setInteractive({ draggable: isLearned });
+            
+            // Hover effects and tooltips (no upgrade highlighting since we have plus button)
+            skillZone.on('pointerover', () => {
                 // Show new Diablo 2-style skill tooltip
                 this.showSkillTooltip(skillData.name, x, y - skillSize);
             });
             
             skillZone.on('pointerout', () => {
-                // Restore normal appearance
-                skillBg.clear();
-                skillBg.fillStyle(isLearned ? 0x3a2810 : 0x1a1810, 1);
-                skillBg.fillRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
-                skillBg.lineStyle(2, isLearned ? 0x8b6513 : 0x4a3020, 1);
-                skillBg.strokeRect(x - skillSize/2, y - skillSize/2, skillSize, skillSize);
-                
                 this.hideTooltip();
             });
             
@@ -2538,6 +3330,73 @@ class UIManager {
         this.closeInventory();
         this.closeCharacterSheet();
         this.closeSkillTree();
+        this.closeHelp();
+    }
+    
+    toggleWalkRun() {
+        if (this.player) {
+            // Manual toggle overrides force walking - reset the flag
+            if (this.player.wasForceWalking) {
+                this.player.wasForceWalking = false;
+            }
+            
+            // Check if player has stamina to run
+            if (!this.player.isWalking && this.player.stamina <= 0) {
+                // Can't switch to running with no stamina
+                const warningMessage = this.scene.add.text(
+                    this.scene.cameras.main.centerX,
+                    this.scene.cameras.main.centerY - 100,
+                    'Not enough stamina!',
+                    {
+                        fontSize: '20px',
+                        color: '#ff4444',
+                        stroke: '#000000',
+                        strokeThickness: 2
+                    }
+                );
+                warningMessage.setOrigin(0.5, 0.5);
+                warningMessage.setDepth(2000);
+                warningMessage.setScrollFactor(0);
+                
+                this.scene.tweens.add({
+                    targets: warningMessage,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: () => warningMessage.destroy()
+                });
+                return; // Don't toggle if no stamina
+            }
+            
+            this.player.isWalking = !this.player.isWalking;
+            
+            // Show a message to indicate the mode change
+            const modeText = this.player.isWalking ? 'Walking' : 'Running';
+            const color = this.player.isWalking ? '#66ccff' : '#ffaa66';
+            
+            // Create temporary text to show the mode change
+            const modeMessage = this.scene.add.text(
+                this.scene.cameras.main.centerX,
+                this.scene.cameras.main.centerY - 100,
+                modeText,
+                {
+                    fontSize: '24px',
+                    color: color,
+                    stroke: '#000000',
+                    strokeThickness: 2
+                }
+            );
+            modeMessage.setOrigin(0.5, 0.5);
+            modeMessage.setDepth(2000);
+            modeMessage.setScrollFactor(0);
+            
+            // Fade out the message
+            this.scene.tweens.add({
+                targets: modeMessage,
+                alpha: 0,
+                duration: 1500,
+                onComplete: () => modeMessage.destroy()
+            });
+        }
     }
     
     showHotbarTooltip(slotType, slotIndex, x, y) {
@@ -2592,6 +3451,10 @@ class UIManager {
         // Clear stored dimensions
         this.tooltipWidth = null;
         this.tooltipHeight = null;
+        
+        // Clear currently hovered item for dynamic Shift detection
+        this.currentHoveredItem = null;
+        this.currentTooltipPosition = { x: 0, y: 0 };
     }
     
     showSimpleTooltip(text, x, y) {
@@ -3977,6 +4840,35 @@ class UIManager {
         }
         
         return item.equipSlot === targetSlot;
+    }
+    
+    isOverUI(pointer) {
+        // Check if pointer is over any open UI panels
+        const uiDepth = 1000; // UI elements are at depth 1000+
+        
+        // Simple bounds check for open panels
+        if (this.inventoryOpen || this.characterSheetOpen || this.skillTreeOpen) {
+            // Check if pointer is in UI area (rough approximation)
+            const centerX = this.scene.cameras.main.width / 2;
+            const centerY = this.scene.cameras.main.height / 2;
+            
+            // UI panels are generally centered, check a reasonable area around center
+            const uiWidth = 500;
+            const uiHeight = 400;
+            
+            if (pointer.x > centerX - uiWidth/2 && pointer.x < centerX + uiWidth/2 &&
+                pointer.y > centerY - uiHeight/2 && pointer.y < centerY + uiHeight/2) {
+                return true;
+            }
+        }
+        
+        // Check hotbar areas (bottom of screen)
+        const hotbarY = this.scene.cameras.main.height - 100;
+        if (pointer.y > hotbarY) {
+            return true;
+        }
+        
+        return false;
     }
     
     handleEquipmentDrop(targetSlot) {

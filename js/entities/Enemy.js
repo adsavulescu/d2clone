@@ -661,7 +661,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             }
         }
         
-        if (!player || !player.active) {
+        if (!player || !player.active || player.isDead) {
             this.state = 'wandering';
             this.isAggro = false; // Reset aggro if player is gone
         } else {
@@ -793,6 +793,13 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     attack(time, player) {
+        // Don't attack if player is dead
+        if (player.isDead) {
+            this.state = 'idle';
+            this.isPerformingAttack = false;
+            return;
+        }
+        
         // Always update direction to face player during attack
         const currentAttackDir = this.calculateDirectionToTarget(player.x, player.y);
         

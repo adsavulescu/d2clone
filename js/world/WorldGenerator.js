@@ -485,10 +485,6 @@ class WorldGenerator {
                 // Ensure walls are immovable and have proper physics settings
                 wall.body.immovable = true;
                 wall.body.moves = false;
-                
-                // Enable debug display for walls
-                wall.body.debugShowBody = true;
-                wall.body.debugBodyColor = 0xff0000; // Red for walls
             }
         });
         
@@ -499,33 +495,119 @@ class WorldGenerator {
         const centerX = this.townCenter.x * this.tileSize;
         const centerY = this.townCenter.y * this.tileSize;
         
-        // Town center fountain/waypoint
-        const waypoint = this.scene.add.graphics();
-        waypoint.fillStyle(0x4169e1, 1);
-        waypoint.fillCircle(centerX, centerY, 12);
-        waypoint.lineStyle(2, 0x87ceeb, 1);
-        waypoint.strokeCircle(centerX, centerY, 12);
-        waypoint.fillStyle(0x87ceeb, 0.5);
-        waypoint.fillCircle(centerX, centerY, 8);
-        waypoint.setDepth(100);
-        tileGroup.add(waypoint);
+        // Grand town center fountain - much bigger and fancier
+        const fountain = this.scene.add.graphics();
         
-        // Add town buildings
-        this.addTownBuildings(tileGroup);
+        // Outer decorative ring (stone platform)
+        fountain.fillStyle(0x5a5a5a, 1);
+        fountain.fillCircle(centerX, centerY, 32);
+        fountain.lineStyle(3, 0x2f2f2f, 1);
+        fountain.strokeCircle(centerX, centerY, 32);
         
-        // Add NPCs
-        this.addTownNPCs(tileGroup);
+        // Middle stone ring
+        fountain.fillStyle(0x696969, 1);
+        fountain.fillCircle(centerX, centerY, 26);
+        fountain.lineStyle(2, 0x2f4f4f, 1);
+        fountain.strokeCircle(centerX, centerY, 26);
         
-        // Add town sign
-        const sign = this.scene.add.text(centerX, centerY - 40, `Rogue Encampment\nWorld ${this.worldLevel}`, {
+        // Inner fountain rim
+        fountain.fillStyle(0x708090, 1);
+        fountain.fillCircle(centerX, centerY, 20);
+        fountain.lineStyle(2, 0x4682b4, 0.8);
+        fountain.strokeCircle(centerX, centerY, 20);
+        
+        // Water basin (larger)
+        fountain.fillStyle(0x4682b4, 0.9);
+        fountain.fillCircle(centerX, centerY, 18);
+        
+        // Decorative water rings
+        fountain.fillStyle(0x87ceeb, 0.4);
+        fountain.fillCircle(centerX, centerY, 15);
+        fountain.fillStyle(0x4682b4, 0.6);
+        fountain.fillCircle(centerX, centerY, 12);
+        
+        // Central ornate pillar (bigger)
+        fountain.fillStyle(0xf5f5dc, 1);
+        fountain.fillCircle(centerX, centerY, 8);
+        fountain.lineStyle(2, 0xdaa520, 1);
+        fountain.strokeCircle(centerX, centerY, 8);
+        
+        // Inner decorative core
+        fountain.fillStyle(0xdaa520, 0.8);
+        fountain.fillCircle(centerX, centerY, 5);
+        
+        // Ornate details on pillar
+        fountain.fillStyle(0xffd700, 1);
+        fountain.fillCircle(centerX, centerY - 6, 2);
+        fountain.fillCircle(centerX, centerY + 6, 2);
+        fountain.fillCircle(centerX - 6, centerY, 2);
+        fountain.fillCircle(centerX + 6, centerY, 2);
+        
+        // More water sparkles (distributed around larger area)
+        fountain.fillStyle(0x87ceeb, 0.8);
+        fountain.fillCircle(centerX - 8, centerY - 6, 2);
+        fountain.fillCircle(centerX + 7, centerY + 8, 1.5);
+        fountain.fillCircle(centerX + 10, centerY - 4, 2);
+        fountain.fillCircle(centerX - 6, centerY + 10, 1.5);
+        fountain.fillCircle(centerX - 12, centerY + 3, 1);
+        fountain.fillCircle(centerX + 4, centerY - 11, 1.5);
+        fountain.fillCircle(centerX + 13, centerY + 5, 1);
+        fountain.fillCircle(centerX - 9, centerY - 12, 1.5);
+        
+        // Magical glow effect
+        fountain.fillStyle(0x87ceeb, 0.2);
+        fountain.fillCircle(centerX, centerY, 35);
+        
+        fountain.setDepth(100);
+        tileGroup.add(fountain);
+        
+        // Town buildings and NPCs removed for cleaner town
+        
+        // Beautiful town sign with decorative elements (wider for text)
+        const signPost = this.scene.add.graphics();
+        
+        // Wooden sign post (taller and sturdier)
+        signPost.fillStyle(0x8b4513, 1);
+        signPost.fillRect(centerX - 3, centerY - 80, 6, 40);
+        
+        // Sign board background (extra wide and tall for plenty of text space)
+        signPost.fillStyle(0x654321, 1);
+        signPost.fillRoundedRect(centerX - 90, centerY - 90, 180, 50, 5);
+        signPost.lineStyle(3, 0x4a2c17, 1);
+        signPost.strokeRoundedRect(centerX - 90, centerY - 90, 180, 50, 5);
+        
+        // Decorative metal bands
+        signPost.lineStyle(2, 0x2f2f2f, 1);
+        signPost.strokeRoundedRect(centerX - 85, centerY - 85, 170, 40, 3);
+        
+        // Decorative corners (brass studs)
+        signPost.fillStyle(0xdaa520, 1);
+        signPost.fillCircle(centerX - 80, centerY - 80, 3);
+        signPost.fillCircle(centerX + 80, centerY - 80, 3);
+        signPost.fillCircle(centerX - 80, centerY - 50, 3);
+        signPost.fillCircle(centerX + 80, centerY - 50, 3);
+        
+        // Corner decorative elements
+        signPost.fillStyle(0x8b4513, 1);
+        signPost.fillCircle(centerX - 82, centerY - 82, 2);
+        signPost.fillCircle(centerX + 82, centerY - 82, 2);
+        signPost.fillCircle(centerX - 82, centerY - 48, 2);
+        signPost.fillCircle(centerX + 82, centerY - 48, 2);
+        
+        signPost.setDepth(101);
+        tileGroup.add(signPost);
+        
+        // Sign text (with proper spacing)
+        const signText = this.scene.add.text(centerX, centerY - 65, `Rogue Encampment\nWorld ${this.worldLevel}`, {
             fontSize: '14px',
-            fill: '#ffffff',
+            fill: '#f4e4bc',
             fontWeight: 'bold',
             align: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            padding: { x: 6, y: 3 }
-        }).setOrigin(0.5).setDepth(101);
-        tileGroup.add(sign);
+            stroke: '#2a1810',
+            strokeThickness: 1,
+            lineSpacing: 2
+        }).setOrigin(0.5).setDepth(102);
+        tileGroup.add(signText);
     }
     
     addTownBuildings(tileGroup) {

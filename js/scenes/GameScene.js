@@ -9,11 +9,17 @@ class GameScene extends Phaser.Scene {
         this.needsEnemyHealthBarRecreation = false; // Flag to mark when enemy health bar needs recreation
     }
     
-    create() {
+    create(data) {
+        // Handle respawn from death screen
+        this.respawnInTown = data && data.respawnInTown;
+        
+        // Store player frames data from preloader
+        this.playerFrames = data && data.playerFrames;
+        
         // Initialize transition flag
         this.isTransitioning = false;
         
-        // Explicitly disable physics debug rendering
+        // Disable physics debug rendering
         this.physics.world.drawDebug = false;
         if (this.physics.world.debugGraphic) {
             this.physics.world.debugGraphic.clear();
@@ -33,7 +39,9 @@ class GameScene extends Phaser.Scene {
         
         // Spawn player at town hall
         const spawnPos = this.worldGenerator.getTownHallSpawnPosition();
-        this.player = new Player(this, spawnPos.x, spawnPos.y);
+        this.player = new Player(this, spawnPos.x, spawnPos.y, this.playerFrames);
+        
+        // No need for respawn handling in create anymore
         
         this.enemies = this.physics.add.group({
             classType: Enemy,
@@ -88,10 +96,27 @@ class GameScene extends Phaser.Scene {
         this.playerTarget = null;
         this.pendingItemPickup = null;
         
+        // Track mouse button states for continuous movement
+        this.isLeftMouseDown = false;
+        this.isRightMouseDown = false;
+        this.isMiddleMouseDown = false;
+        
+        // Track timing for click vs hold distinction
+        this.leftMouseDownTime = 0;
+        this.HOLD_THRESHOLD = 200; // milliseconds to distinguish click from hold
+        
         
         // Unified input handling for both item cursor and regular gameplay
         this.input.on('pointerdown', (pointer) => {
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            
+            // Track mouse button states and timing
+            if (pointer.leftButtonDown()) {
+                this.isLeftMouseDown = true;
+                this.leftMouseDownTime = this.time.now;
+            }
+            if (pointer.rightButtonDown()) this.isRightMouseDown = true;
+            if (pointer.middleButtonDown()) this.isMiddleMouseDown = true;
             
             // Handle item on cursor first
             if (this.uiManager && this.uiManager.isItemOnCursor) {
@@ -140,6 +165,64 @@ class GameScene extends Phaser.Scene {
                     // Middle click - use MMB mouse hotbar slot (index 1)
                     if (this.uiManager) {
                         this.uiManager.useMouseHotbarSlot(1, worldPoint);
+                    }
+                }
+            }
+        });
+        
+        // Track mouse button releases
+        this.input.on('pointerup', (pointer) => {
+            if (pointer.leftButtonReleased()) {
+                const holdDuration = this.time.now - this.leftMouseDownTime;
+                this.isLeftMouseDown = false;
+                
+                // Handle click-to-move (quick clicks under threshold)
+                if (holdDuration < this.HOLD_THRESHOLD) {
+                    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+                    
+                    // Only set target if not over UI or item on cursor
+                    if (!this.uiManager || (!this.uiManager.isItemOnCursor && !this.uiManager.isOverUI(pointer))) {
+                        // Check if left mouse hotbar has move action
+                        const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[0] : null;
+                        if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
+                            this.playerTarget = { x: worldPoint.x, y: worldPoint.y };
+                            this.createMoveMarker(worldPoint.x, worldPoint.y);
+                        }
+                    }
+                }
+                // For holds, stop continuous movement
+                else {
+                    const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[0] : null;
+                    if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
+                        this.playerTarget = null;
+                        if (this.moveMarker) {
+                            this.moveMarker.destroy();
+                            this.moveMarker = null;
+                        }
+                    }
+                }
+            }
+            if (pointer.rightButtonReleased()) {
+                this.isRightMouseDown = false;
+                // Stop movement when right mouse is released (if it was used for movement)
+                const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[2] : null;
+                if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
+                    this.playerTarget = null;
+                    if (this.moveMarker) {
+                        this.moveMarker.destroy();
+                        this.moveMarker = null;
+                    }
+                }
+            }
+            if (pointer.middleButtonReleased()) {
+                this.isMiddleMouseDown = false;
+                // Stop movement when middle mouse is released (if it was used for movement)
+                const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[1] : null;
+                if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
+                    this.playerTarget = null;
+                    if (this.moveMarker) {
+                        this.moveMarker.destroy();
+                        this.moveMarker = null;
                     }
                 }
             }
@@ -378,26 +461,10 @@ class GameScene extends Phaser.Scene {
     }
     
     generateWorld() {
-        // Clear existing world if it exists
-        if (this.worldTiles) {
-            this.worldTiles.destroy();
-        }
-        
-        // Clear existing walls and their colliders
-        if (this.worldWalls) {
-            // First remove all wall colliders
-            this.wallColliders.forEach(collider => {
-                if (collider && collider.destroy) {
-                    collider.destroy();
-                }
-            });
-            this.wallColliders = [];
-            
-            // Then destroy the wall group
-            this.worldWalls.clear(true, true);
-            this.worldWalls.destroy(true);
-            this.worldWalls = null;
-        }
+        // Simple cleanup - just nullify references
+        this.worldTiles = null;
+        this.worldWalls = null;
+        this.wallColliders = [];
         
         this.worldGenerator = new WorldGenerator(this, 150, 150, 32, this.currentWorldLevel);
         this.worldTiles = this.worldGenerator.generate();
@@ -466,10 +533,9 @@ class GameScene extends Phaser.Scene {
                 enemy.destroy();
             }
         });
-        this.enemies.clear(true, true);
-        
-        // Clear all item drops
-        this.itemDrops.clear(true, true);
+        // Simple cleanup for groups - let Phaser handle cleanup on scene restart
+        this.enemies = null;
+        this.itemDrops = null;
         
         // Clear existing portal zone and overlap handler
         if (this.portalOverlap) {
@@ -738,6 +804,15 @@ class GameScene extends Phaser.Scene {
         if (!this.player.active) {
             this.gameOver();
             return;
+        }
+        
+        // Handle continuous movement when mouse button is held down (only for holds, not clicks)
+        if (this.isLeftMouseDown && (this.time.now - this.leftMouseDownTime) >= this.HOLD_THRESHOLD) {
+            const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[0] : null;
+            if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
+                const worldPoint = this.getPlayerCursorWorldPoint();
+                this.playerTarget = { x: worldPoint.x, y: worldPoint.y };
+            }
         }
         
         this.player.update(this.playerTarget);
@@ -1226,6 +1301,35 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(1500, () => {
             this.scene.start('EndGameScreen', playerData);
         });
+    }
+    
+    respawnPlayer() {
+        if (this.player) {
+            // Reset death state
+            this.player.isDead = false;
+            
+            // Restore health and mana to full
+            this.player.health = this.player.maxHealth;
+            this.player.mana = this.player.maxMana;
+            
+            // Teleport player to town center
+            const spawnPos = this.worldGenerator.getTownHallSpawnPosition();
+            this.player.setPosition(spawnPos.x, spawnPos.y);
+            
+            // Stop player movement
+            this.player.body.setVelocity(0);
+            this.playerTarget = null;
+            
+            // Update UI to reflect restored health/mana and experience changes
+            if (this.uiManager) {
+                this.uiManager.updateHealthManaGlobes();
+                this.uiManager.updateExperienceBar();
+                this.uiManager.updateStaminaBar();
+            }
+            
+            // Fade the game scene back in
+            this.cameras.main.fadeIn(800, 0, 0, 0);
+        }
     }
     
 }

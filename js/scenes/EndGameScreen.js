@@ -126,12 +126,12 @@ class EndGameScreen extends Phaser.Scene {
         // Format play time
         const playTimeText = this.formatPlayTime(this.playerData.playTime);
         
-        // Stats display
-        const statsText = `Level Reached: ${this.playerData.level}
-Total Experience: ${this.playerData.experience.toLocaleString()}
-Worlds Explored: ${this.playerData.worldLevel}
-Enemies Slain: ${this.playerData.enemiesKilled}
-Items Collected: ${this.playerData.itemsCollected}
+        // Stats display with safe property access
+        const statsText = `Level Reached: ${this.playerData.level || 1}
+Total Experience: ${(this.playerData.experience || 0).toLocaleString()}
+Worlds Explored: ${this.playerData.worldLevel || 1}
+Enemies Slain: ${this.playerData.enemiesKilled || 0}
+Items Collected: ${this.playerData.itemsCollected || 0}
 Time Survived: ${playTimeText}`;
         
         this.add.text(centerX, startY + 80, statsText, {
@@ -289,12 +289,12 @@ Time Survived: ${playTimeText}`;
     
     calculateScore() {
         // Calculate score based on various factors
-        const levelBonus = this.playerData.level * 1000;
-        const expBonus = Math.floor(this.playerData.experience / 10);
-        const worldBonus = this.playerData.worldLevel * 2000;
-        const enemyBonus = this.playerData.enemiesKilled * 100;
-        const itemBonus = this.playerData.itemsCollected * 50;
-        const timeBonus = Math.floor(this.playerData.playTime / 1000) * 10; // 10 points per second survived
+        const levelBonus = (this.playerData.level || 1) * 1000;
+        const expBonus = Math.floor((this.playerData.experience || 0) / 10);
+        const worldBonus = (this.playerData.worldLevel || 1) * 2000;
+        const enemyBonus = (this.playerData.enemiesKilled || 0) * 100;
+        const itemBonus = (this.playerData.itemsCollected || 0) * 50;
+        const timeBonus = Math.floor((this.playerData.playTime || 0) / 1000) * 10; // 10 points per second survived
         
         return levelBonus + expBonus + worldBonus + enemyBonus + itemBonus + timeBonus;
     }

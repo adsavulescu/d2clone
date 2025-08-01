@@ -1,18 +1,21 @@
 class Player extends Phaser.Physics.Arcade.Sprite {
-    constructor(scene, x, y) {
+    constructor(scene, x, y, playerFrames) {
         super(scene, x, y, 'player');
+        
+        // Store animation frames data
+        this.playerFrames = playerFrames || null;
         
         scene.add.existing(this);
         scene.physics.add.existing(this);
         
         this.setCollideWorldBounds(true);
-        this.setScale(1); // Keep scale at 1 since sprites are already 3x larger
+        this.setScale(1.5); // Double the previous size: from 96x96 to 192x192 (128 * 1.5 = 192)
         this.setDepth(200); // Ensure player is above everything including town hall
         
-        // Update physics body for 3x larger sprites (96x96)
+        // Update physics body for scaled sprites (192x192 displayed, but 128x128 actual)
         // Use optimal collision box for smooth wall sliding
-        this.body.setSize(32, 32); // Reasonable size - exactly one tile
-        this.body.setOffset(32, 32); // Center the collision box perfectly
+        this.body.setSize(21, 21); // Collision box in original sprite space (32 / 1.5 ≈ 21)
+        this.body.setOffset(53.5, 53.5); // Center the collision box (128/2 - 21/2 ≈ 53.5)
         
         // Configure physics for smooth wall sliding - key settings
         this.body.bounce.set(0); // No bouncing - essential for smooth sliding
@@ -26,21 +29,21 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         // Set collision world bounds
         this.body.collideWorldBounds = true;
         
-        // Enable debug display to visualize collision box
-        this.body.debugShowBody = true;
-        this.body.debugShowVelocity = true;
-        this.body.debugBodyColor = 0x00ff00; // Green for player
-        this.body.debugBodyColor = 0x000000;
         
         // Movement direction tracking
         this.currentDirection = 'down';
         this.lastVelocity = { x: 0, y: 0 };
+        this.isCasting = false;
+        this.isWalking = false; // Toggle between walk and run
         
         // Setup directional animations
         this.setupAnimations();
         
         // Invulnerability for transitions
         this.isInvulnerable = false;
+        
+        // Death state
+        this.isDead = false;
         
         // Experience and Level System
         this.level = 1;
@@ -93,6 +96,15 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         // Current health/mana (separate from max)
         this.health = this.maxHealth;
         this.mana = this.maxMana;
+        
+        // Stamina system (Diablo 2 style)
+        this.maxStamina = 80 + (this.allocatedStats.vitality * 2) + this.level; // Base 80 + 2 per vitality + 1 per level
+        this.stamina = this.maxStamina;
+        this.staminaDrainRate = 0.25; // Stamina lost per frame while running (4x slower)
+        this.staminaRegenRate = 0.5; // Stamina gained per frame while walking/standing (4x slower)
+        this.staminaRegenDelay = 1000; // Delay before regen starts after running (ms)
+        this.lastStaminaDrain = 0; // Track when stamina was last drained
+        this.wasForceWalking = false; // Track if player was forced to walk due to no stamina
         
         // Skills system - Organized by tabs (Offensive, Defensive, Passive)
         this.skills = {
@@ -452,41 +464,104 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         // Create animations for all 8 directions
         const directions = ['down', 'up', 'left', 'right', 'downleft', 'downright', 'upleft', 'upright'];
         
-        directions.forEach(dir => {
-            if (!this.scene.anims.exists(`sorcerer_walk_${dir}`)) {
+        if (this.playerFrames) {
+            // Create animations from loaded sprite sheets
+            directions.forEach(dir => {
+                // Run animation
+                if (this.playerFrames.run && this.playerFrames.run[dir] && !this.scene.anims.exists(`sorcerer_run_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_run_${dir}`,
+                        frames: this.playerFrames.run[dir].map(frameKey => ({ key: frameKey })),
+                        frameRate: 24, // 2x speed: 12 -> 24
+                        repeat: -1
+                    });
+                }
+                
+                // Walk animation
+                if (this.playerFrames.walk && this.playerFrames.walk[dir] && !this.scene.anims.exists(`sorcerer_walk_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_walk_${dir}`,
+                        frames: this.playerFrames.walk[dir].map(frameKey => ({ key: frameKey })),
+                        frameRate: 16, // 2x speed: 8 -> 16
+                        repeat: -1
+                    });
+                }
+                
+                // Idle animation
+                if (this.playerFrames.idle && this.playerFrames.idle[dir] && !this.scene.anims.exists(`sorcerer_idle_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_idle_${dir}`,
+                        frames: this.playerFrames.idle[dir].map(frameKey => ({ key: frameKey })),
+                        frameRate: 16, // 2x speed: 8 -> 16
+                        repeat: -1
+                    });
+                }
+                
+                // Cast animation
+                if (this.playerFrames.cast && this.playerFrames.cast[dir] && !this.scene.anims.exists(`sorcerer_cast_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_cast_${dir}`,
+                        frames: this.playerFrames.cast[dir].map(frameKey => ({ key: frameKey })),
+                        frameRate: 128, // 4x speed: 32 -> 128 (2x faster than previous)
+                        repeat: 0
+                    });
+                }
+                
+                // Death animation
+                if (this.playerFrames.death && this.playerFrames.death[dir] && !this.scene.anims.exists(`sorcerer_death_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_death_${dir}`,
+                        frames: this.playerFrames.death[dir].map(frameKey => ({ key: frameKey })),
+                        frameRate: 20, // 2x speed: 10 -> 20
+                        repeat: 0
+                    });
+                }
+            });
+            
+            // Default idle animation
+            if (this.playerFrames.idle && this.playerFrames.idle.down && !this.scene.anims.exists('sorcerer_idle')) {
                 this.scene.anims.create({
-                    key: `sorcerer_walk_${dir}`,
-                    frames: [{ key: `sorcerer_${dir}` }],
-                    frameRate: 8,
+                    key: 'sorcerer_idle',
+                    frames: this.playerFrames.idle.down.map(frameKey => ({ key: frameKey })),
+                    frameRate: 16, // 2x speed: 8 -> 16
                     repeat: -1
                 });
             }
-        });
-        
-        // Create idle animations for all directions
-        directions.forEach(dir => {
-            if (!this.scene.anims.exists(`sorcerer_idle_${dir}`)) {
+        } else {
+            // Fallback to single frame animations if no sprite data
+            directions.forEach(dir => {
+                if (!this.scene.anims.exists(`sorcerer_walk_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_walk_${dir}`,
+                        frames: [{ key: `sorcerer_${dir}` }],
+                        frameRate: 8,
+                        repeat: -1
+                    });
+                }
+                
+                if (!this.scene.anims.exists(`sorcerer_idle_${dir}`)) {
+                    this.scene.anims.create({
+                        key: `sorcerer_idle_${dir}`,
+                        frames: [{ key: `sorcerer_${dir}` }],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                }
+            });
+            
+            // Default idle animation
+            if (!this.scene.anims.exists('sorcerer_idle')) {
                 this.scene.anims.create({
-                    key: `sorcerer_idle_${dir}`,
-                    frames: [{ key: `sorcerer_${dir}` }],
+                    key: 'sorcerer_idle',
+                    frames: [{ key: 'sorcerer_down' }],
                     frameRate: 1,
                     repeat: 0
                 });
             }
-        });
-        
-        // Default idle animation
-        if (!this.scene.anims.exists('sorcerer_idle')) {
-            this.scene.anims.create({
-                key: 'sorcerer_idle',
-                frames: [{ key: 'sorcerer_down' }],
-                frameRate: 1,
-                repeat: 0
-            });
         }
         
         // Start with idle animation
-        this.play('sorcerer_idle');
+        this.play('sorcerer_idle_down');
     }
     
     
@@ -539,9 +614,13 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.attackSpeed = 100 + equipmentBonuses.attackSpeed;
         this.castSpeed = 100 + equipmentBonuses.castSpeed;
         
-        // Ensure current health/mana don't exceed new maximums
+        // Calculate max stamina (base 80 + 2 per vitality + 1 per level)
+        this.maxStamina = 80 + (totalVitality * 2) + this.level;
+        
+        // Ensure current health/mana/stamina don't exceed new maximums
         this.health = Math.min(this.health, this.maxHealth);
         this.mana = Math.min(this.mana, this.maxMana);
+        this.stamina = Math.min(this.stamina || this.maxStamina, this.maxStamina);
     }
     
     calculateEquipmentBonuses() {
@@ -614,9 +693,10 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         // Update derived stats
         this.updateDerivedStats();
         
-        // Heal player on level up
+        // Heal player and restore stamina on level up
         this.health = this.maxHealth;
         this.mana = this.maxMana;
+        this.stamina = this.maxStamina;
         
         // Visual level up effect
         const levelUpText = this.scene.add.text(this.x, this.y - 50, 'LEVEL UP!', {
@@ -729,15 +809,40 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     
     
     update(targetPosition) {
+        // Don't update anything if player is dead
+        if (this.isDead) {
+            return;
+        }
+        
         // Store position before movement for debugging
         
         // Follow Phaser 3 best practice: reset velocity first, then apply movement
         this.body.setVelocity(0);
         
-        if (targetPosition && Phaser.Math.Distance.Between(this.x, this.y, targetPosition.x, targetPosition.y) > 10) {
+        // Prevent movement while casting (Movement-Restricted Casting)
+        if (this.isCasting) {
+            this.lastVelocityX = 0;
+            this.lastVelocityY = 0;
+        } else if (targetPosition && Phaser.Math.Distance.Between(this.x, this.y, targetPosition.x, targetPosition.y) > 10) {
             const angle = Phaser.Math.Angle.Between(this.x, this.y, targetPosition.x, targetPosition.y);
-            const velocityX = Math.cos(angle) * this.speed;
-            const velocityY = Math.sin(angle) * this.speed;
+            
+            // Calculate current movement speed (walk is half speed, running drains stamina)
+            let currentSpeed = this.speed;
+            const isMoving = true; // We're in the movement block
+            
+            if (this.isWalking) {
+                currentSpeed = this.speed * 0.5; // Walk is half speed
+            } else if (this.stamina <= 0) {
+                currentSpeed = this.speed * 0.5; // No stamina = forced walk speed
+                this.isWalking = true; // Force walking when out of stamina
+            } else {
+                // Running - drain stamina
+                this.stamina = Math.max(0, this.stamina - this.staminaDrainRate);
+                this.lastStaminaDrain = this.scene.time.now;
+            }
+            
+            const velocityX = Math.cos(angle) * currentSpeed;
+            const velocityY = Math.sin(angle) * currentSpeed;
             
             // Apply movement - Phaser's collision system will handle wall sliding
             this.body.setVelocity(velocityX, velocityY);
@@ -754,14 +859,55 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.updateDirectionAndAnimation(this.lastVelocityX, this.lastVelocityY);
         
         this.updatePotionEffects();
+        this.updateStamina();
         
         this.mana = Math.min(this.maxMana, this.mana + 0.1);
     }
     
+    updateStamina() {
+        const currentTime = this.scene.time.now;
+        const isMoving = Math.abs(this.lastVelocityX) > 5 || Math.abs(this.lastVelocityY) > 5;
+        
+        // If not moving or walking, regenerate stamina (with delay after running)
+        if (!isMoving || this.isWalking) {
+            const timeSinceLastDrain = currentTime - this.lastStaminaDrain;
+            
+            // Only regenerate if enough time has passed since last stamina drain
+            if (timeSinceLastDrain > this.staminaRegenDelay) {
+                const previousStamina = this.stamina;
+                this.stamina = Math.min(this.maxStamina, this.stamina + this.staminaRegenRate);
+                
+                // If stamina reaches max and player was force-walking, auto-resume running
+                if (this.wasForceWalking && this.stamina >= this.maxStamina) {
+                    this.isWalking = false;
+                    this.wasForceWalking = false;
+                    // Update the UI button to reflect resumed running
+                    if (this.scene.uiManager) {
+                        this.scene.uiManager.updateWalkRunButton();
+                    }
+                }
+            }
+        }
+        
+        // If stamina is completely depleted and player tries to run, force walk
+        if (this.stamina <= 0 && !this.isWalking) {
+            this.isWalking = true;
+            this.wasForceWalking = true; // Mark as force-walking for auto-resume
+            // Update the UI button to reflect forced walking
+            if (this.scene.uiManager) {
+                this.scene.uiManager.updateWalkRunButton();
+            }
+        }
+    }
+    
     
     updateDirectionAndAnimation(velocityX, velocityY) {
+        // Update direction even while casting, but handle animations differently
+        const wasMoving = Math.abs(this.lastVelocity.x) > 5 || Math.abs(this.lastVelocity.y) > 5;
+        
         const isMoving = Math.abs(velocityX) > 5 || Math.abs(velocityY) > 5;
         
+        // Always update direction based on movement or mouse position
         if (isMoving) {
             let newDirection = this.currentDirection;
             
@@ -788,19 +934,41 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 newDirection = 'upright';
             }
             
-            // Update direction and animation if changed
-            if (newDirection !== this.currentDirection) {
-                this.currentDirection = newDirection;
-                this.play(`sorcerer_walk_${newDirection}`);
-            } else if (!this.anims.isPlaying) {
-                // Resume walking animation if it stopped
-                this.play(`sorcerer_walk_${newDirection}`);
+            // Update direction
+            const oldDirection = this.currentDirection;
+            this.currentDirection = newDirection;
+            
+            // If casting and direction changed, update the cast animation
+            if (this.isCasting && oldDirection !== newDirection) {
+                this.updateCastDirection();
+            }
+            
+            // Only play movement animations if not casting
+            if (!this.isCasting) {
+                // Play appropriate movement animation based on walk/run toggle
+                const movementKey = this.isWalking ? `sorcerer_walk_${newDirection}` : `sorcerer_run_${newDirection}`;
+                const currentAnim = this.anims.currentAnim;
+                
+                // If direction changed during movement, preserve frame progress
+                if (oldDirection !== newDirection && currentAnim && 
+                    (currentAnim.key.includes('walk_') || currentAnim.key.includes('run_'))) {
+                    this.updateMovementDirection(movementKey);
+                }
+                // Play movement animation if not already playing the correct one
+                else if (!currentAnim || currentAnim.key !== movementKey) {
+                    this.play(movementKey);
+                }
             }
         } else {
             // Player stopped moving - play idle animation for current direction
-            const idleKey = `sorcerer_idle_${this.currentDirection}`;
-            if (this.anims.currentAnim && this.anims.currentAnim.key !== idleKey) {
-                this.play(idleKey);
+            if (!this.isCasting) {
+                const idleKey = `sorcerer_idle_${this.currentDirection}`;
+                const currentAnim = this.anims.currentAnim;
+                
+                // Play idle animation if not already playing the correct one
+                if (!currentAnim || currentAnim.key !== idleKey) {
+                    this.play(idleKey);
+                }
             }
         }
         
@@ -809,6 +977,146 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.lastVelocity.y = velocityY;
     }
     
+    playCastAnimation() {
+        // Stop all movement when casting begins (Movement-Restricted Casting)
+        this.body.setVelocity(0);
+        this.lastVelocityX = 0;
+        this.lastVelocityY = 0;
+        
+        // Clear any pending movement targets in the scene
+        if (this.scene.playerTarget) {
+            this.scene.playerTarget = null;
+        }
+        
+        // Update direction to face mouse before casting
+        this.setDirectionFromMouse();
+        
+        // Play casting animation for current direction
+        const castAnim = `sorcerer_cast_${this.currentDirection}`;
+        if (this.scene.anims.exists(castAnim)) {
+            this.isCasting = true;
+            this.play(castAnim);
+            
+            // Return to idle animation when cast is complete
+            this.once('animationcomplete', () => {
+                this.isCasting = false;
+                this.play(`sorcerer_idle_${this.currentDirection}`);
+            });
+        }
+    }
+    
+    setDirectionFromMouse() {
+        // Get mouse position and calculate direction from player to mouse
+        const pointer = this.scene.input.activePointer;
+        if (pointer) {
+            const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            const deltaX = worldPoint.x - this.x;
+            const deltaY = worldPoint.y - this.y;
+            
+            // Only update if mouse is far enough away to avoid jittering
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            if (distance > 20) {
+                // Calculate angle to determine 8-directional facing
+                const angle = Math.atan2(deltaY, deltaX);
+                const degreeAngle = (angle * 180 / Math.PI + 360) % 360;
+                
+                // Determine direction based on angle (8 directions)
+                if (degreeAngle >= 337.5 || degreeAngle < 22.5) {
+                    this.currentDirection = 'right';
+                } else if (degreeAngle >= 22.5 && degreeAngle < 67.5) {
+                    this.currentDirection = 'downright';
+                } else if (degreeAngle >= 67.5 && degreeAngle < 112.5) {
+                    this.currentDirection = 'down';
+                } else if (degreeAngle >= 112.5 && degreeAngle < 157.5) {
+                    this.currentDirection = 'downleft';
+                } else if (degreeAngle >= 157.5 && degreeAngle < 202.5) {
+                    this.currentDirection = 'left';
+                } else if (degreeAngle >= 202.5 && degreeAngle < 247.5) {
+                    this.currentDirection = 'upleft';
+                } else if (degreeAngle >= 247.5 && degreeAngle < 292.5) {
+                    this.currentDirection = 'up';
+                } else if (degreeAngle >= 292.5 && degreeAngle < 337.5) {
+                    this.currentDirection = 'upright';
+                }
+            }
+        }
+    }
+
+    updateCastDirection() {
+        // Update casting animation to face new direction while preserving frame progress
+        if (this.isCasting) {
+            const newCastAnim = `sorcerer_cast_${this.currentDirection}`;
+            if (this.scene.anims.exists(newCastAnim)) {
+                // Get current animation progress
+                const currentAnim = this.anims.currentAnim;
+                let currentFrameIndex = 0;
+                let animProgress = 0;
+                
+                if (currentAnim && this.anims.currentFrame) {
+                    // Calculate progress as a percentage
+                    currentFrameIndex = this.anims.currentFrame.index;
+                    const totalFrames = currentAnim.frames.length;
+                    animProgress = currentFrameIndex / totalFrames;
+                }
+                
+                // Remove the old animation complete listener to prevent conflicts
+                this.off('animationcomplete');
+                
+                // Start the new direction cast animation
+                this.play(newCastAnim);
+                
+                // Set the animation to the same relative progress
+                if (this.anims.currentAnim && animProgress > 0) {
+                    const newTotalFrames = this.anims.currentAnim.frames.length;
+                    const targetFrame = Math.floor(animProgress * newTotalFrames);
+                    
+                    // Ensure targetFrame is within valid bounds
+                    if (targetFrame >= 0 && targetFrame < newTotalFrames && this.anims.currentAnim.frames[targetFrame]) {
+                        // Jump to the corresponding frame
+                        this.anims.setCurrentFrame(this.anims.currentAnim.frames[targetFrame]);
+                    }
+                }
+                
+                // Re-add the completion listener for the new animation
+                this.once('animationcomplete', () => {
+                    this.isCasting = false;
+                    this.play(`sorcerer_idle_${this.currentDirection}`);
+                });
+            }
+        }
+    }
+
+    updateMovementDirection(newMovementKey) {
+        // Update movement animation to face new direction while preserving frame progress
+        if (this.scene.anims.exists(newMovementKey)) {
+            // Get current animation progress
+            const currentAnim = this.anims.currentAnim;
+            let animProgress = 0;
+            
+            if (currentAnim && this.anims.currentFrame) {
+                // Calculate progress as a percentage
+                const currentFrameIndex = this.anims.currentFrame.index;
+                const totalFrames = currentAnim.frames.length;
+                animProgress = currentFrameIndex / totalFrames;
+            }
+            
+            // Start the new direction movement animation
+            this.play(newMovementKey);
+            
+            // Set the animation to the same relative progress
+            if (this.anims.currentAnim && animProgress > 0) {
+                const newTotalFrames = this.anims.currentAnim.frames.length;
+                const targetFrame = Math.floor(animProgress * newTotalFrames);
+                
+                // Ensure targetFrame is within valid bounds
+                if (targetFrame >= 0 && targetFrame < newTotalFrames && this.anims.currentAnim.frames[targetFrame]) {
+                    // Jump to the corresponding frame
+                    this.anims.setCurrentFrame(this.anims.currentAnim.frames[targetFrame]);
+                }
+            }
+        }
+    }
+
     castFireball(targetX, targetY) {
         const skill = this.skills.fireball;
         const currentTime = this.scene.time.now;
@@ -821,6 +1129,9 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         
         skill.lastUsed = currentTime;
         this.mana -= manaCost;
+        
+        // Play casting animation
+        this.playCastAnimation();
         
         const damage = this.getSkillDamage('fireball');
         new Fireball(this.scene, this.x, this.y, targetX, targetY, damage);
@@ -839,6 +1150,9 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         
         skill.lastUsed = currentTime;
         this.mana -= manaCost;
+        
+        // Play casting animation
+        this.playCastAnimation();
         
         const damage = this.getSkillDamage('frostNova');
         const radius = this.getSkillRadius('frostNova');
@@ -1095,17 +1409,116 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.health -= amount;
         this.health = Math.max(0, this.health);
         
-        this.scene.tweens.add({
-            targets: this,
-            alpha: 0.5,
-            duration: 100,
-            yoyo: true,
-            repeat: 2
-        });
-        
         if (this.health <= 0) {
-            this.destroy();
+            this.die();
         }
+    }
+    
+    die() {
+        // Prevent further input and movement
+        this.isDead = true;
+        this.body.setVelocity(0);
+        
+        // Stop all current actions
+        this.isCasting = false;
+        if (this.castingSkill) {
+            this.castingSkill = null;
+        }
+        
+        // Play death animation first
+        this.playDeathAnimation();
+        
+        // Calculate experience penalty based on level and world
+        const experienceLost = this.calculateDeathPenalty();
+        this.experience = Math.max(0, this.experience - experienceLost);
+        
+        // Check if we need to delevel
+        this.checkDelevel();
+        
+        // Gather death data
+        const deathData = {
+            level: this.level,
+            experienceLost: experienceLost,
+            currentExperience: this.experience,
+            worldLevel: this.scene.currentWorldLevel || 1
+        };
+        
+        // Wait for death animation to finish (3 seconds), then show death screen
+        this.scene.time.delayedCall(3000, () => {
+            // Fade out game scene
+            this.scene.cameras.main.fadeOut(800, 0, 0, 0);
+            
+            this.scene.time.delayedCall(800, () => {
+                // Pause game scene and launch death screen
+                this.scene.scene.pause('GameScene');
+                this.scene.scene.launch('DeathScreen', deathData);
+            });
+        });
+    }
+    
+    playDeathAnimation() {
+        // Get current direction for death animation
+        const dir = this.currentDirection;
+        const deathAnimKey = `sorcerer_death_${dir}`;
+        
+        // Play death animation if it exists
+        if (this.scene.anims.exists(deathAnimKey)) {
+            this.play(deathAnimKey);
+        } else {
+            console.warn(`Death animation ${deathAnimKey} not found`);
+            // Fallback: just fade out
+            this.scene.tweens.add({
+                targets: this,
+                alpha: 0.5,
+                duration: 2000,
+                ease: 'Power2'
+            });
+        }
+    }
+    
+    calculateDeathPenalty() {
+        // Diablo 2-style death penalty: lose percentage of experience needed for next level
+        // Penalty increases with level and world difficulty
+        const basePercentage = 0.05; // 5% base penalty
+        const levelMultiplier = Math.min(this.level * 0.01, 0.15); // Up to 15% additional based on level
+        const worldMultiplier = Math.min((this.scene.currentWorldLevel - 1) * 0.02, 0.10); // Up to 10% based on world
+        
+        const totalPercentage = basePercentage + levelMultiplier + worldMultiplier;
+        
+        // Safety checks to prevent NaN
+        const safeExperience = this.experience || 0;
+        const safeExperienceToNext = this.experienceToNext || 100;
+        
+        // Calculate experience needed for next level more safely
+        const currentLevelProgress = safeExperience % safeExperienceToNext;
+        const experienceForNextLevel = safeExperienceToNext - currentLevelProgress;
+        
+        const penalty = Math.floor(experienceForNextLevel * totalPercentage);
+        
+        // Ensure penalty is never NaN or negative
+        return Math.max(0, isNaN(penalty) ? 0 : penalty);
+    }
+    
+    checkDelevel() {
+        // Check if we need to delevel due to experience loss
+        while (this.level > 1 && this.experience < this.getExperienceForLevel(this.level - 1)) {
+            this.level--;
+            this.statPoints += 5; // Give back stat points for delevel
+            this.skillPoints += 1; // Give back skill point for delevel
+            this.updateDerivedStats();
+        }
+        
+        // Recalculate experience to next level
+        this.experienceToNext = this.getExperienceForLevel(this.level);
+    }
+    
+    getExperienceForLevel(level) {
+        // Calculate total experience needed to reach a specific level
+        let totalExperience = 0;
+        for (let i = 1; i < level; i++) {
+            totalExperience += Math.floor(100 * Math.pow(1.1, i - 1));
+        }
+        return totalExperience;
     }
     
     destroy() {

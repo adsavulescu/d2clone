@@ -144,46 +144,82 @@ class StartScreen extends Phaser.Scene {
         this.instructionsPanel = this.add.container(centerX, this.cameras.main.centerY);
         this.instructionsPanel.setVisible(false);
         
-        // Background panel
+        // Background panel (larger to fit all text)
         const panelBg = this.add.graphics();
         panelBg.fillStyle(0x000000, 0.9);
-        panelBg.fillRoundedRect(-300, -200, 600, 400, 10);
+        panelBg.fillRoundedRect(-350, -280, 700, 560, 10);
         panelBg.lineStyle(3, 0x8b4513, 1);
-        panelBg.strokeRoundedRect(-300, -200, 600, 400, 10);
+        panelBg.strokeRoundedRect(-350, -280, 700, 560, 10);
         
-        // Instructions text
-        const instructionsText = `CONTROLS:
-        
-Left Click - Move / Attack
-Right Click - Cast Fireball
-Q - Health Potion
-E - Mana Potion
-1-4 - Use Hotbar Skills
+        // Left column text
+        const leftColumnText = `MOVEMENT:
+Left Click - Move to location
+Hold Left Click - Continuous movement
+T - Toggle Walk/Run
+
+COMBAT:
+Right Click - Cast spell (default: Fireball)
+Q/W/E/R - Use assigned skills
+1/2 - Use potions
 
 INTERFACE:
-I - Inventory
-C - Character Stats
-S - Skills Tree
-ESC - Close Panels
+I - Toggle Inventory
+C - Toggle Character Sheet
+S - Toggle Skills Tree
+ESC - Close all panels`;
 
-GAMEPLAY:
+        // Right column text
+        const rightColumnText = `GAMEPLAY:
 • Kill enemies to gain experience
-• Level up to earn stat and skill points
+• Level up to earn stat points
 • Collect and equip better items
-• Explore multiple worlds through portals
+• Manage stamina while running
+• Explore worlds through portals
 • Survive as long as possible!
 
-Press ESC to close`;
-        
-        const instructions = this.add.text(0, -50, instructionsText, {
-            fontSize: '18px',
+TIPS:
+• Open Character (C) to spend points
+• Open Skills (S) to upgrade abilities
+• Use potions (1/2) to heal
+• Walk to conserve stamina`;
+
+        // Create left column (moved down for padding after title)
+        const leftInstructions = this.add.text(-280, -30, leftColumnText, {
+            fontSize: '14px',
             fill: '#cccccc',
-            fontFamily: 'monospace',
+            fontFamily: 'serif',
             align: 'left',
-            lineSpacing: 8
+            lineSpacing: 3
+        }).setOrigin(0, 0.5);
+
+        // Create right column (moved down for padding after title)
+        const rightInstructions = this.add.text(80, -30, rightColumnText, {
+            fontSize: '14px',
+            fill: '#cccccc',
+            fontFamily: 'serif',
+            align: 'left',
+            lineSpacing: 4
+        }).setOrigin(0, 0.5);
+
+        // Title
+        const title = this.add.text(0, -220, 'CONTROLS & GAMEPLAY', {
+            fontSize: '24px',
+            fill: '#d4af37',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+
+        // Close instruction
+        const closeText = this.add.text(0, 220, 'Press ESC to close', {
+            fontSize: '16px',
+            fill: '#ffaa66',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 1
         }).setOrigin(0.5);
         
-        this.instructionsPanel.add([panelBg, instructions]);
+        this.instructionsPanel.add([panelBg, leftInstructions, rightInstructions, title, closeText]);
     }
     
     createAtmosphericEffects() {

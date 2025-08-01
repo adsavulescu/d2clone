@@ -3,17 +3,391 @@ class Preloader extends Phaser.Scene {
         super({ key: 'Preloader' });
     }
 
+    // Helper method to safely generate textures (prevents duplicate texture errors)
+    safeGenerateTexture(graphics, key, width, height) {
+        if (!this.textures.exists(key)) {
+            graphics.generateTexture(key, width, height);
+        }
+    }
+
     preload() {
-        this.createAssets();
+        // Create loading progress display
+        this.createLoadingScreen();
         
-        // All assets are generated procedurally, no external images needed
+        // Load player sprite sheets
+        this.loadPlayerSprites();
+        
+        // Create other assets procedurally
+        this.createAssets();
+    }
+    
+    createLoadingScreen() {
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+        
+        // Dark background with stone texture pattern
+        this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a1a);
+        
+        // Create stone background texture
+        this.createStoneBackground(width, height);
+        
+        // Create the loading portal
+        this.createLoadingPortal(width / 2, height / 2);
+        
+        // Title text with gothic style
+        this.loadingText = this.add.text(width / 2, height / 2 - 180, 'Entering the Sanctuary...', {
+            fontSize: '28px',
+            color: '#d4af37',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.loadingText.setOrigin(0.5, 0.5);
+        
+        // Progress text below portal
+        this.progressText = this.add.text(width / 2, height / 2 + 150, '0%', {
+            fontSize: '18px',
+            color: '#d4af37',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 1
+        });
+        this.progressText.setOrigin(0.5, 0.5);
+        
+        // Error text (hidden by default)
+        this.errorText = this.add.text(width / 2, height / 2 + 180, '', {
+            fontSize: '16px',
+            color: '#ff4444',
+            fontFamily: 'serif',
+            stroke: '#000000',
+            strokeThickness: 1
+        });
+        this.errorText.setOrigin(0.5, 0.5);
+        
+        // Listen to loading events
+        this.load.on('progress', this.updateProgress, this);
+        this.load.on('fileprogress', this.fileProgress, this);
+        this.load.on('filecomplete', this.fileComplete, this);
+        this.load.on('loaderror', this.loadError, this);
+    }
+    
+    createStoneBackground(width, height) {
+        // Create a subtle stone/brick pattern background
+        const graphics = this.add.graphics();
+        
+        // Draw random stone-like rectangles across the screen
+        for (let x = 0; x < width; x += 80) {
+            for (let y = 0; y < height; y += 60) {
+                const offsetX = Math.random() * 20 - 10;
+                const offsetY = Math.random() * 15 - 7;
+                const stoneWidth = 70 + Math.random() * 20;
+                const stoneHeight = 50 + Math.random() * 15;
+                
+                // Vary stone colors slightly
+                const darkness = 0x0f + Math.floor(Math.random() * 8);
+                const stoneColor = (darkness << 16) | (darkness << 8) | darkness;
+                
+                graphics.fillStyle(stoneColor, 0.3);
+                graphics.fillRect(x + offsetX, y + offsetY, stoneWidth, stoneHeight);
+                
+                // Add some edge highlights
+                graphics.lineStyle(1, 0x2a2a2a, 0.5);
+                graphics.strokeRect(x + offsetX, y + offsetY, stoneWidth, stoneHeight);
+            }
+        }
+    }
+    
+    createLoadingPortal(centerX, centerY) {
+        // Portal dimensions
+        const portalWidth = 200;
+        const portalHeight = 280;
+        
+        // Create portal frame (stone archway)
+        this.portalFrame = this.add.graphics();
+        this.drawPortalFrame(this.portalFrame, centerX, centerY, portalWidth, portalHeight);
+        
+        // Create the inner portal area (starts closed)
+        this.portalInner = this.add.graphics();
+        this.portalInner.setDepth(1);
+        
+        // Create glowing particle effects around the portal
+        this.createPortalParticles(centerX, centerY, portalWidth, portalHeight);
+        
+        // Initialize portal animation state
+        this.portalProgress = 0;
+        this.portalOpenSpeed = 0.01; // Will be updated based on loading progress
+        
+        // Start continuous portal animation
+        this.portalAnimationTimer = this.time.addEvent({
+            delay: 16, // ~60 FPS
+            callback: this.updatePortalOpening,
+            callbackScope: this,
+            loop: true
+        });
+    }
+    
+    drawPortalFrame(graphics, centerX, centerY, width, height) {
+        graphics.clear();
+        
+        // Stone archway frame
+        const frameThickness = 25;
+        const stoneColor = 0x4a4a4a;
+        const shadowColor = 0x2a2a2a;
+        const highlightColor = 0x6a6a6a;
+        
+        // Main frame
+        graphics.fillStyle(stoneColor);
+        graphics.fillRoundedRect(centerX - width/2 - frameThickness, centerY - height/2 - frameThickness, 
+                                width + frameThickness * 2, height + frameThickness * 2, 20);
+        
+        // Inner cutout (portal opening)
+        graphics.fillStyle(0x000000);
+        graphics.fillRoundedRect(centerX - width/2, centerY - height/2, width, height, 15);
+        
+        // Add stone details and depth
+        graphics.lineStyle(3, shadowColor);
+        graphics.strokeRoundedRect(centerX - width/2 - frameThickness, centerY - height/2 - frameThickness, 
+                                  width + frameThickness * 2, height + frameThickness * 2, 20);
+        
+        graphics.lineStyle(2, highlightColor);
+        graphics.strokeRoundedRect(centerX - width/2 - frameThickness + 3, centerY - height/2 - frameThickness + 3, 
+                                  width + frameThickness * 2 - 6, height + frameThickness * 2 - 6, 17);
+        
+        // Add some decorative stone blocks
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const radius = width/2 + frameThickness/2;
+            const blockX = centerX + Math.cos(angle) * radius;
+            const blockY = centerY + Math.sin(angle) * (height/2 + frameThickness/2);
+            
+            graphics.fillStyle(highlightColor);
+            graphics.fillRect(blockX - 6, blockY - 4, 12, 8);
+            graphics.lineStyle(1, shadowColor);
+            graphics.strokeRect(blockX - 6, blockY - 4, 12, 8);
+        }
+    }
+    
+    createPortalParticles(centerX, centerY, width, height) {
+        // Create floating embers/sparks around the portal
+        this.portalParticles = [];
+        
+        for (let i = 0; i < 15; i++) {
+            const particle = this.add.graphics();
+            particle.fillStyle(0xff6600, 0.7);
+            particle.fillCircle(0, 0, 2 + Math.random() * 2);
+            
+            // Position around portal frame
+            const angle = Math.random() * Math.PI * 2;
+            const radius = width/2 + 30 + Math.random() * 40;
+            particle.x = centerX + Math.cos(angle) * radius;
+            particle.y = centerY + Math.sin(angle) * (height/2 + 30 + Math.random() * 40);
+            
+            // Animation properties
+            particle.floatSpeed = 0.3 + Math.random() * 0.5;
+            particle.floatDirection = Math.random() * Math.PI * 2;
+            particle.alpha = 0.5 + Math.random() * 0.5;
+            
+            this.portalParticles.push(particle);
+        }
+        
+        // Animate particles
+        this.particleTimer = this.time.addEvent({
+            delay: 50,
+            callback: this.animatePortalParticles,
+            callbackScope: this,
+            loop: true
+        });
+    }
+    
+    animatePortalParticles() {
+        this.portalParticles.forEach(particle => {
+            particle.x += Math.cos(particle.floatDirection) * particle.floatSpeed;
+            particle.y += Math.sin(particle.floatDirection) * particle.floatSpeed;
+            
+            // Gentle floating motion
+            particle.floatDirection += (Math.random() - 0.5) * 0.1;
+            
+            // Fade in and out
+            particle.alpha += (Math.random() - 0.5) * 0.1;
+            particle.alpha = Phaser.Math.Clamp(particle.alpha, 0.2, 0.8);
+        });
+    }
+    
+    updateProgress(value) {
+        // Update progress text
+        this.progressText.setText(Math.round(value * 100) + '%');
+        
+        // Update portal opening animation
+        this.portalProgress = value;
+        this.updatePortalOpening();
+    }
+    
+    updatePortalOpening() {
+        if (!this.portalInner) return;
+        
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        const portalWidth = 200;
+        const portalHeight = 280;
+        
+        this.portalInner.clear();
+        
+        if (this.portalProgress > 0) {
+            // Calculate opening dimensions
+            const openWidth = portalWidth * this.portalProgress;
+            const openHeight = portalHeight * this.portalProgress;
+            
+            // Create magical portal effect
+            const innerRadius = Math.min(openWidth, openHeight) / 2;
+            
+            // Dark void center
+            this.portalInner.fillStyle(0x000011, 1.0);
+            this.portalInner.fillEllipse(centerX, centerY, openWidth * 0.8, openHeight * 0.8);
+            
+            // Swirling energy effects
+            const time = this.time.now * 0.001;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2 + time;
+                const spiralRadius = innerRadius * 0.6 * (0.5 + 0.5 * Math.sin(time * 2 + i));
+                const spiralX = centerX + Math.cos(angle) * spiralRadius;
+                const spiralY = centerY + Math.sin(angle) * spiralRadius * 0.7;
+                
+                // Energy wisps
+                const wispColor = i % 2 === 0 ? 0x0066ff : 0x6600ff;
+                this.portalInner.fillStyle(wispColor, 0.6);
+                this.portalInner.fillCircle(spiralX, spiralY, 3 + Math.sin(time * 3 + i) * 2);
+            }
+            
+            // Outer energy ring
+            this.portalInner.lineStyle(3, 0x00aaff, 0.8);
+            this.portalInner.strokeEllipse(centerX, centerY, openWidth * 0.9, openHeight * 0.9);
+            
+            // Inner mystical glow
+            this.portalInner.lineStyle(2, 0x8800ff, 0.6);
+            this.portalInner.strokeEllipse(centerX, centerY, openWidth * 0.7, openHeight * 0.7);
+            
+            // Add energy crackling effects as portal opens more
+            if (this.portalProgress > 0.5) {
+                for (let i = 0; i < 6; i++) {
+                    const crackleAngle = Math.random() * Math.PI * 2;
+                    const crackleRadius = innerRadius * (0.4 + Math.random() * 0.3);
+                    const crackleX = centerX + Math.cos(crackleAngle) * crackleRadius;
+                    const crackleY = centerY + Math.sin(crackleAngle) * crackleRadius * 0.7;
+                    
+                    this.portalInner.lineStyle(1, 0xffffaa, 0.9);
+                    this.portalInner.lineBetween(
+                        crackleX, crackleY,
+                        crackleX + (Math.random() - 0.5) * 20,
+                        crackleY + (Math.random() - 0.5) * 20
+                    );
+                }
+            }
+        }
+    }
+    
+    fileProgress(file) {
+        // Show current file being loaded with mystical flavor
+        if (this.loadingText) {
+            this.loadingText.setText('Conjuring: ' + file.key + '...');
+        }
+    }
+    
+    fileComplete(key, type, data) {
+        // Asset loaded successfully
+    }
+    
+    loadError(file) {
+        console.error('Failed to load:', file.key, file.url);
+        this.errorText.setText('Failed to load some assets. Check console for details.');
+        
+        // Add to failed assets list
+        if (!this.failedAssets) this.failedAssets = [];
+        this.failedAssets.push(file);
+    }
+
+    loadPlayerSprites() {
+        // Initialize loading stats
+        this.totalAssetsToLoad = 0;
+        this.assetsLoaded = 0;
+        
+        // Define animation types and their frame counts (sequential, not skipped)
+        const animations = {
+            idle: { frameCount: 263 }, // Goes up to idle_0_263.png
+            run: { frameCount: 21 }, // Goes up to run_0_021.png  
+            walk: { frameCount: 31 }, // Goes up to walk_0_031.png
+            cast: { frameCount: 69 }, // Goes up to cast_0_069.png
+            death: { frameCount: 109 } // Goes up to death_0_109.png  
+        };
+        
+        // Define directions with their angle mapping
+        const directions = {
+            'E': { angle: 0, key: 'right' },
+            'NE': { angle: 45, key: 'upright' },
+            'N': { angle: 90, key: 'up' },
+            'NW': { angle: 135, key: 'upleft' },
+            'W': { angle: 180, key: 'left' },
+            'SW': { angle: 225, key: 'downleft' },
+            'S': { angle: 270, key: 'down' },
+            'SE': { angle: 315, key: 'downright' }
+        };
+        
+        // Initialize player frames storage
+        this.playerFrames = {};
+        
+        // Create a manifest of all assets to load
+        const assetManifest = [];
+        
+        Object.entries(animations).forEach(([animType, animData]) => {
+            this.playerFrames[animType] = {};
+            
+            Object.entries(directions).forEach(([dirName, dirData]) => {
+                const frames = [];
+                
+                // Build frame list for sequential frames
+                for (let i = 1; i <= animData.frameCount; i++) {
+                    const frameNum = String(i).padStart(3, '0');
+                    const framePath = `assets/sprites/player/${animType}/${dirName}/${animType}_${dirData.angle}_${frameNum}.png`;
+                    const frameKey = `player_${animType}_${dirData.key}_${frameNum}`;
+                    
+                    assetManifest.push({
+                        key: frameKey,
+                        url: framePath,
+                        animType: animType,
+                        direction: dirData.key
+                    });
+                    
+                    frames.push(frameKey);
+                }
+                
+                this.playerFrames[animType][dirData.key] = frames;
+            });
+        });
+        
+        // Update total assets count
+        this.totalAssetsToLoad = assetManifest.length;
+        
+        // Load all assets
+        assetManifest.forEach(asset => {
+            this.load.image(asset.key, asset.url);
+        });
+        
+        // Store frame data for later use
+        this.registry.set('playerFrames', this.playerFrames);
+        
+        // Add fallback handling
+        this.load.on('loaderror', (file) => {
+            console.warn(`Failed to load: ${file.key} from ${file.url}`);
+            // Mark this frame as failed
+            if (!this.failedFrames) this.failedFrames = {};
+            this.failedFrames[file.key] = true;
+        });
     }
 
     createAssets() {
         const graphics = this.make.graphics({ x: 0, y: 0, add: false });
         
         // Create sorcerer sprites for different directions
-        this.createSorcererSprites(graphics);
+        // this.createSorcererSprites(graphics); // Replaced with actual sprite loading
         
         // Create all enemy type sprites
         this.createSkeletalWarriorSprites(graphics);
@@ -42,7 +416,7 @@ class Preloader extends Phaser.Scene {
         graphics.clear();
         graphics.fillStyle(0xff8800, 1);
         graphics.fillCircle(24, 24, 24);
-        graphics.generateTexture('fireball', 48, 48);
+        this.safeGenerateTexture(graphics, 'fireball', 48, 48);
         
         // Frost sprite (light blue circle) - 3x size
         graphics.clear();
@@ -86,49 +460,29 @@ class Preloader extends Phaser.Scene {
         graphics.fillRect(0, 0, 32, 32);
         graphics.generateTexture('dirt', 32, 32);
         
-        // Dungeon floor - dark stone with texture
+        // Dungeon floor - uniform dark stone
         graphics.clear();
         graphics.fillStyle(0x2a2a2a, 1);
         graphics.fillRect(0, 0, 32, 32);
-        graphics.lineStyle(1, 0x1a1a1a, 0.5);
-        graphics.strokeRect(0, 0, 32, 32);
-        graphics.strokeRect(4, 4, 24, 24);
-        graphics.generateTexture('dungeon_floor', 32, 32);
+        this.safeGenerateTexture(graphics, 'dungeon_floor', 32, 32);
         
-        // Dungeon wall - darker with highlights
+        // Dungeon wall - uniform dark wall
         graphics.clear();
         graphics.fillStyle(0x0a0a0a, 1);
         graphics.fillRect(0, 0, 32, 32);
-        graphics.lineStyle(1, 0x3a3a3a, 0.8);
-        graphics.strokeRect(0, 0, 32, 32);
-        graphics.fillStyle(0x1a1a1a, 0.5);
-        graphics.fillRect(2, 2, 28, 28);
-        graphics.generateTexture('dungeon_wall', 32, 32);
+        this.safeGenerateTexture(graphics, 'dungeon_wall', 32, 32);
         
-        // Town floor - cobblestone pattern
+        // Town floor - uniform cobblestone
         graphics.clear();
         graphics.fillStyle(0x8b7355, 1);
         graphics.fillRect(0, 0, 32, 32);
-        // Add cobblestone pattern
-        graphics.lineStyle(1, 0x654321, 0.5);
-        graphics.strokeRect(0, 0, 16, 16);
-        graphics.strokeRect(16, 0, 16, 16);
-        graphics.strokeRect(0, 16, 16, 16);
-        graphics.strokeRect(16, 16, 16, 16);
-        graphics.generateTexture('town_floor', 32, 32);
+        this.safeGenerateTexture(graphics, 'town_floor', 32, 32);
         
-        // Town wall - wooden palisade look
+        // Town wall - uniform wooden wall
         graphics.clear();
         graphics.fillStyle(0x4a3c28, 1);
         graphics.fillRect(0, 0, 32, 32);
-        // Add wood grain
-        graphics.lineStyle(1, 0x3a2c18, 1);
-        for (let i = 4; i < 32; i += 8) {
-            graphics.lineBetween(i, 0, i, 32);
-        }
-        graphics.lineStyle(2, 0x2a1c08, 0.5);
-        graphics.strokeRect(0, 0, 32, 32);
-        graphics.generateTexture('town_wall', 32, 32);
+        this.safeGenerateTexture(graphics, 'town_wall', 32, 32);
         
         // Town path - dirt road
         graphics.clear();
@@ -2623,6 +2977,124 @@ class Preloader extends Phaser.Scene {
     }
 
     create() {
-        this.scene.start('GameScene');
+        // Log loading results
+        if (this.failedAssets && this.failedAssets.length > 0) {
+            console.warn(`Failed to load ${this.failedAssets.length} assets. Using fallback sprites.`);
+            
+            // Show warning for a moment
+            this.errorText.setText(`Warning: ${this.failedAssets.length} assets failed to load. Using fallback sprites.`);
+            this.errorText.setColor('#ffaa00');
+            
+            // Delay scene transition
+            this.time.delayedCall(2000, () => {
+                this.proceedToGame();
+            });
+        } else {
+            // All assets loaded successfully
+            console.log('All assets loaded successfully!');
+            this.proceedToGame();
+        }
+    }
+    
+    proceedToGame() {
+        // Create backward compatibility textures
+        this.createCompatibilityTextures();
+        
+        // Validate player frames before proceeding
+        const hasValidFrames = this.validatePlayerFrames();
+        
+        if (!hasValidFrames) {
+            console.warn('No valid player frames found, using procedural sprites');
+            // If no valid frames, create procedural fallback sprites
+            this.createProceduralPlayerSprites();
+        }
+        
+        // Pass player frames data to GameScene
+        this.scene.start('GameScene', { 
+            playerFrames: hasValidFrames ? this.playerFrames : null 
+        });
+    }
+    
+    validatePlayerFrames() {
+        if (!this.playerFrames) {
+            console.log('No playerFrames object found');
+            return false;
+        }
+        
+        // Check if we have at least one valid frame for essential animations
+        const essentialAnims = ['idle', 'run']; // Changed from 'running' to 'run'
+        const essentialDirs = ['down', 'up', 'left', 'right'];
+        
+        for (let anim of essentialAnims) {
+            if (!this.playerFrames[anim]) {
+                console.log(`Missing animation: ${anim}`);
+                return false;
+            }
+            
+            for (let dir of essentialDirs) {
+                if (!this.playerFrames[anim][dir] || this.playerFrames[anim][dir].length === 0) {
+                    console.log(`Missing or empty frames for ${anim}/${dir}`);
+                    return false;
+                }
+                
+                // Check if at least one frame exists
+                const firstFrame = this.playerFrames[anim][dir][0];
+                if (!this.textures.exists(firstFrame)) {
+                    console.log(`Texture not found: ${firstFrame}. Available textures:`, Object.keys(this.textures.list).slice(0, 10));
+                    return false;
+                }
+            }
+        }
+        
+        console.log('Player frames validation passed!');
+        return true;
+    }
+    
+    createProceduralPlayerSprites() {
+        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+        
+        // Create sorcerer sprites for different directions
+        this.createSorcererSprites(graphics);
+        
+        graphics.destroy();
+    }
+    
+    createCompatibilityTextures() {
+        if (!this.playerFrames || !this.playerFrames.idle) return;
+        
+        // Create aliases for old sprite names
+        const directions = ['down', 'up', 'left', 'right', 'downleft', 'downright', 'upleft', 'upright'];
+        
+        directions.forEach(dir => {
+            const compatKey = `sorcerer_${dir}`;
+            
+            // Only create if it doesn't already exist
+            if (!this.textures.exists(compatKey) && this.playerFrames.idle[dir] && this.playerFrames.idle[dir][0]) {
+                const firstFrame = this.playerFrames.idle[dir][0];
+                if (this.textures.exists(firstFrame)) {
+                    // Create texture copy with old name
+                    const texture = this.textures.get(firstFrame);
+                    const frame = texture.get();
+                    
+                    // Create a canvas and draw the texture
+                    const canvas = this.textures.createCanvas(compatKey, frame.width, frame.height);
+                    canvas.drawFrame(firstFrame, 0, 0, 0);
+                    canvas.refresh();
+                }
+            }
+        });
+        
+        // Create default 'player' texture
+        if (!this.textures.exists('player') && this.playerFrames.idle.down && this.playerFrames.idle.down[0]) {
+            const firstFrame = this.playerFrames.idle.down[0];
+            if (this.textures.exists(firstFrame)) {
+                const texture = this.textures.get(firstFrame);
+                const frame = texture.get();
+                
+                const canvas = this.textures.createCanvas('player', frame.width, frame.height);
+                canvas.drawFrame(firstFrame, 0, 0, 0);
+                canvas.refresh();
+            }
+        }
     }
 }
