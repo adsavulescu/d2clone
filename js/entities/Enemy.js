@@ -1150,8 +1150,13 @@ class Enemy extends Collidable {
                 const minionX = this.x + Math.cos(angle) * distance;
                 const minionY = this.y + Math.sin(angle) * distance;
                 
-                // Create weaker skeleton minion
-                const minion = new Enemy(this.scene, minionX, minionY, 'skeleton', Math.max(1, this.level - 2));
+                // Create weaker skeleton minion using pool if available
+                let minion;
+                if (this.scene.poolManager) {
+                    minion = this.scene.poolManager.spawnEnemy(minionX, minionY, Math.max(1, this.level - 2), 'skeleton', this.scene.collisionRegistry);
+                } else {
+                    minion = new Enemy(this.scene, minionX, minionY, 'skeleton', Math.max(1, this.level - 2));
+                }
                 minion.playerRef = this.scene.player;
                 minion.isMinion = true;
                 minion.setScale(0.7); // Smaller minions
@@ -1325,6 +1330,68 @@ class Enemy extends Collidable {
         this.setTint(0x88ddff);
     }
     
+    // Reset method for object pooling
+    reset(x, y, enemyType = 'skeleton', level = 1) {
+        // Reset position
+        this.setPosition(x, y);
+        this.setVelocity(0, 0);
+        
+        // Reset enemy type and config
+        this.enemyType = enemyType;
+        this.config = EnemyTypes[enemyType] || EnemyTypes.skeleton;
+        
+        // Reset stats based on type and level
+        this.level = level;
+        const isBoss = enemyType.includes('Lord') || enemyType.includes('King');
+        const multiplier = isBoss ? 2 : 1;
+        
+        this.health = this.maxHealth = (this.config.baseHealth + (level * this.config.healthPerLevel)) * multiplier;
+        this.speed = this.config.baseSpeed + (level * this.config.speedPerLevel);
+        this.damage = (this.config.baseDamage + (level * this.config.damagePerLevel)) * multiplier;
+        this.attackRange = this.config.attackRange;
+        this.detectionRange = this.config.detectionRange * multiplier;
+        this.attackCooldown = this.config.attackCooldown;
+        this.experienceReward = this.config.baseExperience + (level * this.config.experiencePerLevel);
+        
+        // Reset state
+        this.state = 'idle';
+        this.currentDirection = 'down';
+        this.isPerformingAttack = false;
+        this.isDead = false;
+        this.frozen = false;
+        this.chilled = false;
+        this.lastAttackTime = 0;
+        this.freezeEndTime = 0;
+        this.chillEndTime = 0;
+        
+        // Clear any active timers
+        if (this.attackTimer) {
+            this.attackTimer.remove();
+            this.attackTimer = null;
+        }
+        if (this.projectileTimer) {
+            this.projectileTimer.remove();
+            this.projectileTimer = null;
+        }
+        
+        // Reset visual state
+        this.clearTint();
+        this.setAlpha(1);
+        this.setScale(isBoss ? 1.5 : 1);
+        
+        // Play idle animation
+        this.play(`${this.config.animationPrefix}_idle_${this.currentDirection}`, true);
+        
+        // Reset AI behavior
+        this.behavior = this.config.behavior || 'melee';
+        this.isBoss = isBoss;
+        this.animationSpeed = this.config.animationSpeed || 6;
+        
+        // Re-enable
+        this.setActive(true);
+        this.setVisible(true);
+    }
+    
     destroy() {
         // Unsubscribe from events
         const eventBus = CollisionEventBus.getInstance();
@@ -1382,7 +1449,13 @@ class Enemy extends Collidable {
         if (this.bossNameText && this.bossNameText.destroy) {
             this.bossNameText.destroy();
         }
-        super.destroy();
+        
+        // If pool manager exists, return to pool instead of destroying
+        if (this.scene && this.scene.poolManager && !this.scene.isTransitioning) {
+            this.scene.poolManager.despawnEnemy(this);
+        } else {
+            super.destroy();
+        }
     }
     
     dropItem() {
@@ -1520,8 +1593,13 @@ class EnemySpawner {
             const baseLevel = Math.max(1, playerLevel + Phaser.Math.Between(-1, 1));
             const worldScaledLevel = baseLevel + Math.floor((worldLevel - 1) * 0.5);
             
-            // Create the enemy
-            const enemy = new Enemy(this.scene, pos.x, pos.y, enemyType, worldScaledLevel);
+            // Create the enemy using pool if available
+            let enemy;
+            if (this.scene.poolManager) {
+                enemy = this.scene.poolManager.spawnEnemy(pos.x, pos.y, worldScaledLevel, enemyType, this.scene.collisionRegistry);
+            } else {
+                enemy = new Enemy(this.scene, pos.x, pos.y, enemyType, worldScaledLevel);
+            }
             enemy.playerRef = this.scene.player;
             
             this.scene.enemies.add(enemy);
@@ -1640,8 +1718,13 @@ class EnemySpawner {
         // Boss level is higher than regular enemies
         const bossLevel = Math.max(1, playerLevel + Phaser.Math.Between(2, 5)) + Math.floor((worldLevel - 1) * 0.8);
         
-        // Create the boss
-        const boss = new Enemy(this.scene, position.x, position.y, bossType, bossLevel);
+        // Create the boss using pool if available
+        let boss;
+        if (this.scene.poolManager) {
+            boss = this.scene.poolManager.spawnEnemy(position.x, position.y, bossLevel, bossType, this.scene.collisionRegistry);
+        } else {
+            boss = new Enemy(this.scene, position.x, position.y, bossType, bossLevel);
+        }
         boss.playerRef = this.scene.player;
         boss.isBoss = true;
         

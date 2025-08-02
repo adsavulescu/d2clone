@@ -659,6 +659,11 @@ class Player extends Collidable {
     gainExperience(amount) {
         this.experience += amount;
         
+        // Emit experience gained event for UIScene
+        if (this.scene) {
+            this.scene.events.emit('experience-gained', amount);
+        }
+        
         while (this.experience >= this.experienceToNext && this.level < 99) {
             this.levelUp();
         }
@@ -681,6 +686,11 @@ class Player extends Collidable {
         // Heal player on level up
         this.health = this.maxHealth;
         this.mana = this.maxMana;
+        
+        // Emit level up event for UIScene
+        if (this.scene) {
+            this.scene.events.emit('level-up');
+        }
         
         // Visual level up effect
         const levelUpText = this.scene.add.text(this.x, this.y - 50, 'LEVEL UP!', {
@@ -1159,7 +1169,11 @@ class Player extends Collidable {
         this.playCastAnimation();
         
         const damage = this.getSkillDamage('fireball');
-        new Fireball(this.scene, this.x, this.y, targetX, targetY, damage);
+        if (this.scene.poolManager) {
+            this.scene.poolManager.spawnProjectile(Fireball, this.x, this.y, targetX, targetY, damage, this);
+        } else {
+            new Fireball(this.scene, this.x, this.y, targetX, targetY, damage);
+        }
         return true;
     }
     
@@ -1241,7 +1255,11 @@ class Player extends Collidable {
         const damage = this.getSkillDamage('iceBolt');
         const accuracy = this.getSkillAccuracy('iceBolt');
         
-        new IceBolt(this.scene, this.x, this.y, targetX, targetY, damage, accuracy);
+        if (this.scene.poolManager) {
+            this.scene.poolManager.spawnProjectile(IceBolt, this.x, this.y, targetX, targetY, damage, this);
+        } else {
+            new IceBolt(this.scene, this.x, this.y, targetX, targetY, damage, accuracy);
+        }
         return true;
     }
     
@@ -1280,7 +1298,11 @@ class Player extends Collidable {
         this.mana -= manaCost;
         
         const damage = this.getSkillDamage('lightningBolt');
-        new LightningBolt(this.scene, this.x, this.y, targetX, targetY, damage);
+        if (this.scene.poolManager) {
+            this.scene.poolManager.spawnProjectile(LightningBolt, this.x, this.y, targetX, targetY, damage, this);
+        } else {
+            new LightningBolt(this.scene, this.x, this.y, targetX, targetY, damage);
+        }
         return true;
     }
     

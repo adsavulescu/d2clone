@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UI Scene Test</title>
+</head>
+<body>
+    <h1>UI Scene Integration Test</h1>
+    <p>Open the browser console and navigate to <a href="http://localhost:8080">http://localhost:8080</a> to test the game.</p>
+    <h2>Expected Behavior:</h2>
+    <ul>
+        <li>UI elements (health/mana globes, hotbars, etc.) should persist when transitioning between worlds</li>
+        <li>UIScene should be running in parallel with GameScene</li>
+        <li>No errors should appear in the console</li>
+    </ul>
+    <h2>Testing Steps:</h2>
+    <ol>
+        <li>Start the game</li>
+        <li>Open inventory (I key) to verify UI works</li>
+        <li>Walk to the portal at the edge of town</li>
+        <li>Enter the portal to transition to World 2</li>
+        <li>Check that all UI elements are still visible and functional</li>
+    </ol>
+</body>
+</html>

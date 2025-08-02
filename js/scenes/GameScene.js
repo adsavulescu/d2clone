@@ -20,6 +20,9 @@ class GameScene extends Phaser.Scene {
         // Initialize transition flag
         this.isTransitioning = false;
         
+        // Initialize Object Pool Manager
+        this.poolManager = new ObjectPoolManager(this);
+        
         // Disable physics debug rendering
         this.physics.world.drawDebug = false;
         if (this.physics.world.debugGraphic) {
@@ -78,8 +81,19 @@ class GameScene extends Phaser.Scene {
         this.setupControls();
         this.setupUI();
         
-        // Initialize UI Manager
-        this.uiManager = new UIManager(this);
+        // Start UIScene for persistent UI
+        this.scene.launch('UIScene');
+        
+        // Get UI Manager reference from UIScene
+        this.time.delayedCall(100, () => {
+            const uiScene = this.scene.get('UIScene');
+            if (uiScene) {
+                this.uiManager = uiScene.getUIManager();
+            }
+        });
+        
+        // Emit player created event for UIScene
+        this.events.emit('player-created', this.player);
         
         // Setup collision rules using the registry
         this.setupCollisionRules();
@@ -323,6 +337,8 @@ class GameScene extends Phaser.Scene {
     // Skill casting and movement now handled by UIManager
     
     setupUI() {
+        // UI is now handled by UIScene
+        // Only create game-world UI elements here
         this.createInfoPanel();
         this.createEnemyHealthBarUI();
     }
@@ -546,6 +562,11 @@ class GameScene extends Phaser.Scene {
         // Store player reference to preserve it
         const playerRef = this.player;
         
+        // Use pool manager to clear all pooled objects
+        if (this.poolManager) {
+            this.poolManager.clearAll();
+        }
+        
         // Clean up collision registry
         if (this.collisionRegistry) {
             this.collisionRegistry.cleanup();
@@ -766,6 +787,9 @@ class GameScene extends Phaser.Scene {
         // Transition to next world
         this.currentWorldLevel++;
         
+        // Emit world transition start event for UIScene
+        this.events.emit('world-transition-start');
+        
         // Make player invulnerable during transition
         this.player.isInvulnerable = true;
         
@@ -819,9 +843,9 @@ class GameScene extends Phaser.Scene {
                 this.cameras.main.startFollow(this.player);
                 this.cameras.main.centerOn(this.player.x, this.player.y);
                 
-                // Player health/mana is managed by UIManager, no need to recreate health bar
+                // UI is now managed by UIScene, no need to recreate
                 
-                // Recreate UI elements to ensure they work properly
+                // Only recreate game-specific UI elements
                 this.recreateUIElements();
                 this.createEnemyHealthBarUI();
                 
@@ -879,6 +903,9 @@ class GameScene extends Phaser.Scene {
                 this.time.delayedCall(1500, () => {
                     transitionText.destroy();
                     this.isTransitioning = false;
+                    
+                    // Emit world transition complete event for UIScene
+                    this.events.emit('world-transition-complete');
                 });
             });
         });
@@ -1044,8 +1071,12 @@ class GameScene extends Phaser.Scene {
             
             if (this.hoveredEnemy) {
                 this.showEnemyHealthBar(this.hoveredEnemy);
+                // Emit event for UIScene
+                this.events.emit('enemy-hover-start', this.hoveredEnemy);
             } else {
                 this.hideEnemyHealthBar();
+                // Emit event for UIScene
+                this.events.emit('enemy-hover-end');
             }
         } else if (this.hoveredEnemy) {
             // Update health bar for current enemy
@@ -1586,5 +1617,19 @@ class GameScene extends Phaser.Scene {
             this.cameras.main.fadeIn(500, 0, 0, 0);
             this.isTransitioning = false;
         });
+    }
+    
+    // Methods for UIScene communication
+    dropItemAtPosition(item, worldPos) {
+        // Create item drop at world position
+        const itemDrop = new Item(this, worldPos.x, worldPos.y, item);
+        this.itemDrops.add(itemDrop);
+    }
+    
+    playerCastSkill(skillId, targetPos) {
+        // Cast skill through player
+        if (this.player && this.player[skillId]) {
+            this.player[skillId](targetPos);
+        }
     }
 }

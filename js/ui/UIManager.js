@@ -1,7 +1,7 @@
 class UIManager {
-    constructor(scene) {
+    constructor(scene, player = null) {
         this.scene = scene;
-        this.player = scene.player;
+        this.player = player || scene.player;
         
         // UI State
         this.inventoryOpen = false;
@@ -42,6 +42,20 @@ class UIManager {
         
         this.setupUI();
         this.setupControls();
+    }
+    
+    setPlayer(player) {
+        this.player = player;
+        // Update any UI elements that depend on player reference
+        if (this.inventoryPanel && this.inventoryPanel.visible) {
+            this.updateInventoryDisplay();
+        }
+        if (this.characterPanel && this.characterPanel.visible) {
+            this.updateCharacterSheet();
+        }
+        if (this.skillTreePanel && this.skillTreePanel.visible) {
+            this.updateSkillTree();
+        }
     }
     
     setupUI() {
@@ -540,9 +554,10 @@ class UIManager {
     }
     
     createTownPortal() {
-        // Call the scene's method to create town portal
-        if (this.scene.createTownPortal) {
-            this.scene.createTownPortal();
+        // Call the game scene's method to create town portal
+        const gameScene = this.scene.scene.get('GameScene');
+        if (gameScene && gameScene.createTownPortal) {
+            gameScene.createTownPortal();
         }
     }
     
@@ -907,8 +922,9 @@ class UIManager {
         this.minimapEnemies = [];
         
         // Add enemy dots
-        if (this.scene.enemies) {
-            this.scene.enemies.getChildren().forEach(enemy => {
+        const gameScene = this.scene.scene.get('GameScene');
+        if (gameScene && gameScene.enemies) {
+            gameScene.enemies.getChildren().forEach(enemy => {
                 if (enemy.active) {
                     const enemyMinimapX = 3 + (enemy.x * scale);
                     const enemyMinimapY = 3 + (enemy.y * scale);
@@ -1666,7 +1682,10 @@ class UIManager {
     
     stopPlayerMovement() {
         // Clear any active movement target
-        this.scene.playerTarget = null;
+        const gameScene = this.scene.scene.get('GameScene');
+        if (gameScene) {
+            gameScene.playerTarget = null;
+        }
         
         // Stop player immediately
         if (this.player && this.player.body) {
@@ -1674,9 +1693,10 @@ class UIManager {
         }
         
         // Clear any move marker
-        if (this.scene.moveMarker) {
-            this.scene.moveMarker.destroy();
-            this.scene.moveMarker = null;
+        const gameScene = this.scene.scene.get('GameScene');
+        if (gameScene && gameScene.moveMarker) {
+            gameScene.moveMarker.destroy();
+            gameScene.moveMarker = null;
         }
     }
     
@@ -1687,8 +1707,11 @@ class UIManager {
         if (hotbarItem.type === 'action' && hotbarItem.name === 'move') {
             // Handle movement - but only if no UI panels are open
             if (!this.isAnyUIOpen()) {
-                this.scene.playerTarget = worldPoint;
-                this.scene.createMoveMarker(worldPoint.x, worldPoint.y);
+                const gameScene = this.scene.scene.get('GameScene');
+                if (gameScene) {
+                    gameScene.playerTarget = worldPoint;
+                    gameScene.createMoveMarker(worldPoint.x, worldPoint.y);
+                }
                 // Clear any pending item pickup when moving to a new location
                 this.scene.pendingItemPickup = null;
             }
@@ -4202,8 +4225,8 @@ class UIManager {
                 }
             } else {
                 // No space in inventory - drop to ground at player position
-                if (this.scene && this.scene.uiManager) {
-                    this.scene.uiManager.createPlayerItemDropAtPosition(item, this.scene.player.x, this.scene.player.y);
+                if (this.player) {
+                    this.createPlayerItemDropAtPosition(item, this.player.x, this.player.y);
                 }
             }
         }
@@ -4361,46 +4384,11 @@ class UIManager {
     
     
     createPlayerItemDropAtPosition(item, x, y) {
-        // Create visual representation of the dropped item
-        const itemSprite = this.scene.add.graphics();
-        
-        // Position at specified coordinates with slight randomization to avoid stacking
-        const offsetX = Phaser.Math.Between(-10, 10);
-        const offsetY = Phaser.Math.Between(-10, 10);
-        itemSprite.x = x + offsetX;
-        itemSprite.y = y + offsetY;
-        itemSprite.setDepth(50);
-        
-        // Draw the proper item icon
-        this.drawDroppedItemIcon(itemSprite, item);
-        
-        // Store item data with the sprite
-        itemSprite.itemData = item;
-        itemSprite.isItemDrop = true;
-        
-        // Prevent immediate pickup for player-dropped items (Diablo 2 behavior)
-        itemSprite.playerDropped = true;
-        itemSprite.dropTime = this.scene.time.now;
-        
-        // Add to scene's item drops group
-        if (!this.scene.itemDrops) {
-            this.scene.itemDrops = this.scene.add.group();
+        // Drop item through game scene
+        const gameScene = this.scene.scene.get('GameScene');
+        if (gameScene) {
+            gameScene.dropItemAtPosition(item, { x, y });
         }
-        this.scene.itemDrops.add(itemSprite);
-        
-        // Add physics for pickup interaction
-        this.scene.physics.add.existing(itemSprite);
-        itemSprite.body.setSize(24, 24);
-        
-        // Make item glow with animated tween
-        this.scene.tweens.add({
-            targets: itemSprite,
-            alpha: { from: 1.0, to: 0.6 },
-            duration: 1000,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
     }
     
     
@@ -4786,5 +4774,188 @@ class UIManager {
             this.player.updateDerivedStats();
             this.refreshInventoryPanel();
         }
+    }
+    
+    // Methods for UIScene integration
+    setInteractive(interactive) {
+        // Enable/disable interaction for all UI elements
+        const interactiveElements = [
+            ...this.potionHotbarSlots,
+            ...this.mouseHotbarSlots,
+            ...this.skillsHotbarSlots
+        ];
+        
+        if (this.inventoryPanel) {
+            interactiveElements.push(...this.inventoryElements);
+        }
+        if (this.characterPanel) {
+            interactiveElements.push(...this.characterPanelElements);
+        }
+        if (this.skillTreePanel) {
+            interactiveElements.push(...this.skillTreePanelElements);
+        }
+        
+        interactiveElements.forEach(element => {
+            if (element && element.setInteractive) {
+                if (interactive) {
+                    element.setInteractive();
+                } else {
+                    element.disableInteractive();
+                }
+            }
+        });
+    }
+    
+    showLevelUpButtons() {
+        // Show stat and skill point allocation buttons
+        if (this.statsButton && this.statsButton.container) {
+            this.statsButton.container.setVisible(true);
+        }
+        if (this.skillsButton && this.skillsButton.container) {
+            this.skillsButton.container.setVisible(true);
+        }
+    }
+    
+    updateHealthManaDisplay() {
+        // Update health and mana globes
+        this.updateHealthManaGlobes();
+    }
+    
+    updateBuffTimers() {
+        // Update buff/debuff timer displays
+        // This would be implemented when buff system is added
+    }
+    
+    updateSkillCooldowns() {
+        // Update skill cooldown displays on hotbar
+        this.skillsHotbarSlots.forEach((slot, index) => {
+            if (slot.cooldownFill && slot.skillKey) {
+                const skill = this.player.skills[slot.skillKey];
+                if (skill && skill.cooldownRemaining > 0) {
+                    const cooldownPercent = skill.cooldownRemaining / skill.cooldown;
+                    slot.cooldownFill.clear();
+                    slot.cooldownFill.fillStyle(0x000000, 0.7);
+                    slot.cooldownFill.fillRect(
+                        slot.x - 22,
+                        slot.y - 22 + (44 * (1 - cooldownPercent)),
+                        44,
+                        44 * cooldownPercent
+                    );
+                } else if (slot.cooldownFill) {
+                    slot.cooldownFill.clear();
+                }
+            }
+        });
+    }
+    
+    setVisible(visible) {
+        // Show/hide all UI elements
+        const allElements = [
+            this.expBarBg,
+            this.expBarFill,
+            this.levelText,
+            this.healthGlobe,
+            this.healthText,
+            this.manaGlobe,
+            this.manaText,
+            ...this.potionHotbarSlots.map(s => s.container),
+            ...this.mouseHotbarSlots.map(s => s.container),
+            ...this.skillsHotbarSlots.map(s => s.container),
+            this.minimapContainer,
+            this.optionsBarBg,
+            this.helpButton,
+            this.tpButton,
+            this.skillsOptionsButton
+        ];
+        
+        if (this.inventoryPanel) {
+            allElements.push(...this.inventoryElements);
+        }
+        if (this.characterPanel) {
+            allElements.push(...this.characterPanelElements);
+        }
+        if (this.skillTreePanel) {
+            allElements.push(...this.skillTreePanelElements);
+        }
+        
+        allElements.forEach(element => {
+            if (element && element.setVisible) {
+                element.setVisible(visible);
+            }
+        });
+    }
+    
+    refreshAllPanels() {
+        // Refresh all open panels
+        if (this.inventoryOpen) {
+            this.refreshInventoryPanel();
+        }
+        if (this.characterSheetOpen) {
+            this.updateCharacterSheet();
+        }
+        if (this.skillTreeOpen) {
+            this.updateSkillTree();
+        }
+        
+        // Update other UI elements
+        this.updateExperienceBar();
+        this.updateHealthManaGlobes();
+        this.updateAllHotbars();
+        this.updateMinimap();
+        this.updateLevelUpButtons();
+    }
+    
+    destroy() {
+        // Clean up all UI elements
+        this.hideTooltip();
+        
+        // Clear intervals and callbacks
+        if (this.cursorFollowCallback) {
+            this.scene.input.off('pointermove', this.cursorFollowCallback);
+        }
+        
+        // Remove key listeners
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.off('keydown-SHIFT');
+            this.scene.input.keyboard.off('keyup-SHIFT');
+        }
+        
+        // Destroy all panels
+        this.closeInventory();
+        this.closeCharacterSheet();
+        this.closeSkillTree();
+        this.closeHelp();
+        
+        // Destroy remaining UI elements
+        const elementsToDestroy = [
+            this.expBarBg,
+            this.expBarFill,
+            this.levelText,
+            this.healthGlobe,
+            this.healthGlobeFill,
+            this.healthText,
+            this.manaGlobe,
+            this.manaGlobeFill,
+            this.manaText,
+            this.minimapContainer,
+            this.optionsBarBg,
+            this.helpButton,
+            this.tpButton,
+            this.skillsOptionsButton,
+            this.dragIcon
+        ];
+        
+        elementsToDestroy.forEach(element => {
+            if (element && element.destroy) {
+                element.destroy();
+            }
+        });
+        
+        // Clear arrays
+        this.potionHotbarSlots = [];
+        this.mouseHotbarSlots = [];
+        this.skillsHotbarSlots = [];
+        this.minimapEnemies = [];
+        this.minimapPortals = [];
     }
 }
