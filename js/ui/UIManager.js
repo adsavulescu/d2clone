@@ -46,7 +46,6 @@ class UIManager {
     
     setupUI() {
         this.createExperienceBar();
-        this.createStaminaBar();
         this.createHealthManaGlobes();
         this.createPotionHotbar();
         this.createSkillsHotbar();
@@ -124,10 +123,6 @@ class UIManager {
             this.closeAllPanels();
         });
         
-        // T key to toggle walk/run
-        this.scene.input.keyboard.on('keydown-T', () => {
-            this.toggleWalkRun();
-        });
     }
     
     createExperienceBar() {
@@ -157,31 +152,6 @@ class UIManager {
         
     }
     
-    createStaminaBar() {
-        const barWidth = 200;
-        const barHeight = 12;
-        const barX = (this.scene.cameras.main.width - barWidth) / 2;
-        const barY = this.scene.cameras.main.height - 25; // Above experience bar
-        
-        // Stamina bar background
-        this.staminaBarBg = this.scene.add.graphics();
-        this.staminaBarBg.fillStyle(0x000000, 1);
-        this.staminaBarBg.fillRect(barX, barY, barWidth, barHeight);
-        this.staminaBarBg.lineStyle(1, 0x666666, 1);
-        this.staminaBarBg.strokeRect(barX, barY, barWidth, barHeight);
-        this.staminaBarBg.setScrollFactor(0).setDepth(1000);
-        
-        // Stamina bar fill
-        this.staminaBar = this.scene.add.graphics();
-        this.staminaBar.setScrollFactor(0).setDepth(1001);
-        
-        // Stamina text (optional - can be hidden for cleaner look)
-        this.staminaText = this.scene.add.text(barX + barWidth/2, barY + barHeight/2, 'STAMINA', {
-            fontSize: '8px',
-            fill: '#cccccc',
-            fontWeight: 'bold'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
-    }
     
     createHealthManaGlobes() {
         const globeSize = 120; // Increased from 60 to 120 (2x size)
@@ -482,8 +452,6 @@ class UIManager {
         // Skills button
         this.createOptionButton(startX + buttonSpacing * 2, barY, buttonWidth, buttonHeight, 'SKILL', 'skills');
         
-        // Walk/Run toggle button
-        this.createOptionButton(startX + buttonSpacing * 3, barY, buttonWidth, buttonHeight, 'RUN', 'walkrun');
         
         // Help button
         this.createOptionButton(startX + buttonSpacing * 4, barY, buttonWidth, buttonHeight, 'HELP', 'help');
@@ -555,23 +523,12 @@ class UIManager {
             case 'skills':
                 this.toggleSkillTree();
                 break;
-            case 'walkrun':
-                this.toggleWalkRun();
-                this.updateWalkRunButton();
-                break;
             case 'help':
                 this.toggleHelp();
                 break;
         }
     }
     
-    updateWalkRunButton() {
-        const walkRunButton = this.optionButtons.find(btn => btn.action === 'walkrun');
-        if (walkRunButton) {
-            const isWalking = this.scene.player.isWalking;
-            walkRunButton.text.setText(isWalking ? 'WALK' : 'RUN');
-        }
-    }
     
     createHelpPanel() {
         this.helpPanelOpen = false;
@@ -617,8 +574,7 @@ class UIManager {
         const helpText = this.scene.add.text(centerX, centerY - 30, 
             'MOVEMENT:\n' +
             '  Left Click - Move to location\n' +
-            '  Hold Left Click - Continuous movement\n' +
-            '  T - Toggle Walk/Run\n\n' +
+            '  Hold Left Click - Continuous movement\n\n' +
             'COMBAT:\n' +
             '  Right Click - Cast spell (default: Fireball)\n' +
             '  Q/W/E/R - Use assigned skills\n' +
@@ -958,11 +914,9 @@ class UIManager {
     
     updateUI() {
         this.updateExperienceBar();
-        this.updateStaminaBar();
         this.updateHealthManaGlobes();
         this.updateAllHotbars();
         this.updateMinimap();
-        this.updateWalkRunButton();
         this.updateLevelUpButtons();
     }
     
@@ -984,31 +938,6 @@ class UIManager {
         this.expText.setText(`${safeExperience} / ${safeExperienceToNext}`);
     }
     
-    updateStaminaBar() {
-        const barWidth = 200;
-        const barHeight = 12;
-        const barX = (this.scene.cameras.main.width - barWidth) / 2;
-        const barY = this.scene.cameras.main.height - 25;
-        
-        const staminaPercent = this.player.stamina / this.player.maxStamina;
-        
-        this.staminaBar.clear();
-        
-        // Color changes based on stamina level (like Diablo 2)
-        let barColor = 0x00ff00; // Green when full
-        if (staminaPercent < 0.5) {
-            barColor = 0xffff00; // Yellow when half
-        }
-        if (staminaPercent < 0.25) {
-            barColor = 0xff0000; // Red when low
-        }
-        
-        this.staminaBar.fillStyle(barColor, 0.8);
-        this.staminaBar.fillRect(barX + 1, barY + 1, (barWidth - 2) * staminaPercent, barHeight - 2);
-        
-        // Update text to show current/max stamina
-        this.staminaText.setText(`${Math.floor(this.player.stamina)}/${this.player.maxStamina}`);
-    }
     
     updateHealthManaGlobes() {
         // Update health globe
@@ -3333,71 +3262,6 @@ class UIManager {
         this.closeHelp();
     }
     
-    toggleWalkRun() {
-        if (this.player) {
-            // Manual toggle overrides force walking - reset the flag
-            if (this.player.wasForceWalking) {
-                this.player.wasForceWalking = false;
-            }
-            
-            // Check if player has stamina to run
-            if (!this.player.isWalking && this.player.stamina <= 0) {
-                // Can't switch to running with no stamina
-                const warningMessage = this.scene.add.text(
-                    this.scene.cameras.main.centerX,
-                    this.scene.cameras.main.centerY - 100,
-                    'Not enough stamina!',
-                    {
-                        fontSize: '20px',
-                        color: '#ff4444',
-                        stroke: '#000000',
-                        strokeThickness: 2
-                    }
-                );
-                warningMessage.setOrigin(0.5, 0.5);
-                warningMessage.setDepth(2000);
-                warningMessage.setScrollFactor(0);
-                
-                this.scene.tweens.add({
-                    targets: warningMessage,
-                    alpha: 0,
-                    duration: 1500,
-                    onComplete: () => warningMessage.destroy()
-                });
-                return; // Don't toggle if no stamina
-            }
-            
-            this.player.isWalking = !this.player.isWalking;
-            
-            // Show a message to indicate the mode change
-            const modeText = this.player.isWalking ? 'Walking' : 'Running';
-            const color = this.player.isWalking ? '#66ccff' : '#ffaa66';
-            
-            // Create temporary text to show the mode change
-            const modeMessage = this.scene.add.text(
-                this.scene.cameras.main.centerX,
-                this.scene.cameras.main.centerY - 100,
-                modeText,
-                {
-                    fontSize: '24px',
-                    color: color,
-                    stroke: '#000000',
-                    strokeThickness: 2
-                }
-            );
-            modeMessage.setOrigin(0.5, 0.5);
-            modeMessage.setDepth(2000);
-            modeMessage.setScrollFactor(0);
-            
-            // Fade out the message
-            this.scene.tweens.add({
-                targets: modeMessage,
-                alpha: 0,
-                duration: 1500,
-                onComplete: () => modeMessage.destroy()
-            });
-        }
-    }
     
     showHotbarTooltip(slotType, slotIndex, x, y) {
         this.hideTooltip();

@@ -97,14 +97,6 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.health = this.maxHealth;
         this.mana = this.maxMana;
         
-        // Stamina system (Diablo 2 style)
-        this.maxStamina = 80 + (this.allocatedStats.vitality * 2) + this.level; // Base 80 + 2 per vitality + 1 per level
-        this.stamina = this.maxStamina;
-        this.staminaDrainRate = 0.25; // Stamina lost per frame while running (4x slower)
-        this.staminaRegenRate = 0.5; // Stamina gained per frame while walking/standing (4x slower)
-        this.staminaRegenDelay = 1000; // Delay before regen starts after running (ms)
-        this.lastStaminaDrain = 0; // Track when stamina was last drained
-        this.wasForceWalking = false; // Track if player was forced to walk due to no stamina
         
         // Skills system - Organized by tabs (Offensive, Defensive, Passive)
         this.skills = {
@@ -614,13 +606,9 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.attackSpeed = 100 + equipmentBonuses.attackSpeed;
         this.castSpeed = 100 + equipmentBonuses.castSpeed;
         
-        // Calculate max stamina (base 80 + 2 per vitality + 1 per level)
-        this.maxStamina = 80 + (totalVitality * 2) + this.level;
-        
-        // Ensure current health/mana/stamina don't exceed new maximums
+        // Ensure current health/mana don't exceed new maximums
         this.health = Math.min(this.health, this.maxHealth);
         this.mana = Math.min(this.mana, this.maxMana);
-        this.stamina = Math.min(this.stamina || this.maxStamina, this.maxStamina);
     }
     
     calculateEquipmentBonuses() {
@@ -693,10 +681,9 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         // Update derived stats
         this.updateDerivedStats();
         
-        // Heal player and restore stamina on level up
+        // Heal player on level up
         this.health = this.maxHealth;
         this.mana = this.maxMana;
-        this.stamina = this.maxStamina;
         
         // Visual level up effect
         const levelUpText = this.scene.add.text(this.x, this.y - 50, 'LEVEL UP!', {
@@ -826,19 +813,18 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         } else if (targetPosition && Phaser.Math.Distance.Between(this.x, this.y, targetPosition.x, targetPosition.y) > 10) {
             const angle = Phaser.Math.Angle.Between(this.x, this.y, targetPosition.x, targetPosition.y);
             
-            // Calculate current movement speed (walk is half speed, running drains stamina)
+            // Calculate movement speed: walk in town, run outside town
             let currentSpeed = this.speed;
-            const isMoving = true; // We're in the movement block
+            const inTown = this.scene.worldGenerator && this.scene.worldGenerator.isInTown(this.x, this.y);
             
-            if (this.isWalking) {
-                currentSpeed = this.speed * 0.5; // Walk is half speed
-            } else if (this.stamina <= 0) {
-                currentSpeed = this.speed * 0.5; // No stamina = forced walk speed
-                this.isWalking = true; // Force walking when out of stamina
+            if (inTown) {
+                // Walk in town (50% faster than before: 0.5 * 1.5 = 0.75)
+                currentSpeed = this.speed * 0.75;
+                this.isWalking = true;
             } else {
-                // Running - drain stamina
-                this.stamina = Math.max(0, this.stamina - this.staminaDrainRate);
-                this.lastStaminaDrain = this.scene.time.now;
+                // Run outside town
+                currentSpeed = this.speed;
+                this.isWalking = false;
             }
             
             const velocityX = Math.cos(angle) * currentSpeed;
@@ -859,46 +845,10 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.updateDirectionAndAnimation(this.lastVelocityX, this.lastVelocityY);
         
         this.updatePotionEffects();
-        this.updateStamina();
         
         this.mana = Math.min(this.maxMana, this.mana + 0.1);
     }
     
-    updateStamina() {
-        const currentTime = this.scene.time.now;
-        const isMoving = Math.abs(this.lastVelocityX) > 5 || Math.abs(this.lastVelocityY) > 5;
-        
-        // If not moving or walking, regenerate stamina (with delay after running)
-        if (!isMoving || this.isWalking) {
-            const timeSinceLastDrain = currentTime - this.lastStaminaDrain;
-            
-            // Only regenerate if enough time has passed since last stamina drain
-            if (timeSinceLastDrain > this.staminaRegenDelay) {
-                const previousStamina = this.stamina;
-                this.stamina = Math.min(this.maxStamina, this.stamina + this.staminaRegenRate);
-                
-                // If stamina reaches max and player was force-walking, auto-resume running
-                if (this.wasForceWalking && this.stamina >= this.maxStamina) {
-                    this.isWalking = false;
-                    this.wasForceWalking = false;
-                    // Update the UI button to reflect resumed running
-                    if (this.scene.uiManager) {
-                        this.scene.uiManager.updateWalkRunButton();
-                    }
-                }
-            }
-        }
-        
-        // If stamina is completely depleted and player tries to run, force walk
-        if (this.stamina <= 0 && !this.isWalking) {
-            this.isWalking = true;
-            this.wasForceWalking = true; // Mark as force-walking for auto-resume
-            // Update the UI button to reflect forced walking
-            if (this.scene.uiManager) {
-                this.scene.uiManager.updateWalkRunButton();
-            }
-        }
-    }
     
     
     updateDirectionAndAnimation(velocityX, velocityY) {
