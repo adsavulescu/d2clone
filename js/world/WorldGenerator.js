@@ -165,8 +165,12 @@ class WorldGenerator {
                 tileGroup.add(tile);
                 
                 if (isWall) {
-                    const wallSprite = this.scene.physics.add.staticSprite(worldX, worldY, tileTexture);
-                    wallSprite.setOrigin(0, 0);
+                    // Position wall sprite at center of tile for proper physics alignment
+                    const wallSprite = this.scene.physics.add.staticSprite(
+                        worldX + this.tileSize / 2, 
+                        worldY + this.tileSize / 2, 
+                        tileTexture
+                    );
                     wallSprite.body.setSize(this.tileSize, this.tileSize);
                     wallSprite.setDepth(1);
                     this.wallGroup.add(wallSprite);

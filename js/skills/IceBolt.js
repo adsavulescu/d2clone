@@ -1,4 +1,4 @@
-class IceBolt extends Phaser.Physics.Arcade.Sprite {
+class IceBolt extends Collidable {
     constructor(scene, x, y, targetX, targetY, damage, accuracy) {
         super(scene, x, y, 'iceBolt');
         
@@ -6,6 +6,20 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         
         this.damage = damage;
+        
+        // Set collision group and mask
+        this.setCollisionGroup(Collidable.Groups.PLAYER_PROJECTILE);
+        this.setCollisionMask([
+            Collidable.Groups.ENEMY
+        ]);
+        
+        // Setup collision handlers
+        this.setupCollisionHandlers();
+        
+        // Add to collision registry
+        if (scene.collisionRegistry) {
+            scene.collisionRegistry.addToGroup(this, Collidable.Groups.PLAYER_PROJECTILE);
+        }
         this.speed = 300;
         this.accuracy = accuracy;
         
@@ -47,25 +61,6 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
         
         trail.startFollow(this);
         this.trail = trail;
-        
-        // Collision with enemies
-        scene.physics.add.overlap(this, scene.enemies, (bolt, enemy) => {
-            // Check if enemy is still valid before interacting with it
-            if (!enemy || !enemy.active || !enemy.scene) {
-                return;
-            }
-            
-            enemy.takeDamage(this.damage);
-            enemy.freeze(1500); // Shorter freeze than Frost Nova
-            this.shatter();
-        });
-        
-        // Add wall collision
-        if (scene.worldWalls) {
-            scene.physics.add.collider(this, scene.worldWalls, () => {
-                this.shatter();
-            });
-        }
     }
     
     shatter() {
@@ -83,6 +78,28 @@ class IceBolt extends Phaser.Physics.Arcade.Sprite {
         });
         
         this.destroy();
+    }
+    
+    setupCollisionHandlers() {
+        this.onCollisionEnter = (other, data) => {
+            if (data.group === Collidable.Groups.ENEMY) {
+                // Check if enemy is still valid before interacting with it
+                if (other && other.active && other.takeDamage) {
+                    other.takeDamage(this.damage);
+                    if (other.freeze) {
+                        other.freeze(1500); // Shorter freeze than Frost Nova
+                    }
+                }
+                this.shatter();
+            }
+        };
+        
+        // Handle wall collision separately
+        if (this.scene.worldWalls) {
+            this.scene.physics.add.collider(this, this.scene.worldWalls, () => {
+                this.shatter();
+            });
+        }
     }
     
     destroy() {

@@ -1,4 +1,4 @@
-class Fireball extends Phaser.Physics.Arcade.Sprite {
+class Fireball extends Collidable {
     constructor(scene, x, y, targetX, targetY, damage) {
         super(scene, x, y, 'fireball');
         
@@ -6,6 +6,20 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         
         this.damage = damage;
+        
+        // Set collision group and mask
+        this.setCollisionGroup(Collidable.Groups.PLAYER_PROJECTILE);
+        this.setCollisionMask([
+            Collidable.Groups.ENEMY
+        ]);
+        
+        // Setup collision handlers
+        this.setupCollisionHandlers();
+        
+        // Add to collision registry
+        if (scene.collisionRegistry) {
+            scene.collisionRegistry.addToGroup(this, Collidable.Groups.PLAYER_PROJECTILE);
+        }
         this.speed = 400;
         
         // Scale down the fireball sprite since it's 3x larger
@@ -35,23 +49,6 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
         particles.startFollow(this);
         
         this.particles = particles;
-        
-        scene.physics.add.overlap(this, scene.enemies, (fireball, enemy) => {
-            // Check if enemy is still valid before interacting with it
-            if (!enemy || !enemy.active || !enemy.scene) {
-                return;
-            }
-            
-            enemy.takeDamage(this.damage);
-            this.explode();
-        });
-        
-        // Add wall collision
-        if (scene.worldWalls) {
-            scene.physics.add.collider(this, scene.worldWalls, () => {
-                this.explode();
-            });
-        }
     }
     
     explode() {
@@ -68,6 +65,34 @@ class Fireball extends Phaser.Physics.Arcade.Sprite {
         });
         
         this.destroy();
+    }
+    
+    setupCollisionHandlers() {
+        this.onCollisionEnter = (other, data) => {
+            if (data.group === Collidable.Groups.ENEMY) {
+                // Check if enemy is still valid before interacting with it
+                if (other && other.active && other.takeDamage) {
+                    other.takeDamage(this.damage);
+                }
+                this.explode();
+            }
+        };
+        
+        // Handle wall collision separately
+        if (this.scene.worldWalls) {
+            this.scene.physics.add.collider(this, this.scene.worldWalls, () => {
+                this.explode();
+            });
+        }
+        
+        // Emit collision event
+        const eventBus = CollisionEventBus.getInstance();
+        this.on('destroy', () => {
+            eventBus.emit(CollisionEventBus.Events.PROJECTILE_ENEMY, {
+                projectile: this,
+                type: 'projectile_destroyed'
+            });
+        });
     }
     
     destroy() {

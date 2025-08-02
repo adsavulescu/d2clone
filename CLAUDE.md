@@ -80,26 +80,53 @@ The game generates all sprites procedurally in `Preloader.js` using Phaser graph
 - Terrain tiles: Colored rectangles (32x32)
 
 ### Physics and Collision
-- Uses Phaser Arcade Physics
-- Enemies collide with each other but not with player (for attack mechanics)
-- Skill projectiles have overlap detection with enemies
-- Item pickup collision system
+
+#### Component-Based Collision System
+The game uses a robust component-based collision system with event-driven architecture:
+
+**Core Components:**
+- **CollisionEventBus**: Central event system for collision notifications
+- **Collidable**: Base class for all entities with collision (extends Phaser.GameObjects.Sprite)
+- **CollisionRegistry**: Manages collision groups and rules
+
+**Collision Groups:**
+- `PLAYER` - Player character
+- `ENEMY` - All enemy types
+- `PLAYER_PROJECTILE` - Player-cast projectiles
+- `ENEMY_PROJECTILE` - Enemy-cast projectiles  
+- `WALL` - World boundaries and obstacles
+- `ITEM` - Dropped items (click-to-pickup)
+- `PORTAL` - World transition portals
+- `AREA_EFFECT` - AoE skills like Frost Nova
+
+**Event System:**
+All collision events are broadcast through CollisionEventBus:
+- `PLAYER_ENEMY` - Player/enemy collision
+- `PROJECTILE_ENEMY` - Projectile hits enemy
+- `PLAYER_ITEM` - Item pickup events
+- `PLAYER_PORTAL` - Portal entry/world transition
+
+**Implementation Notes:**
+- Enemies collide with each other but overlap with player (for attack mechanics)
+- All entities extending Collidable get automatic collision lifecycle management
+- Collision handlers support enter/stay/exit events
+- Registry handles cleanup during world transitions
 
 ### File Loading Order (Critical)
 Scripts must be loaded in this exact order in index.html:
 1. StartScreen.js (main menu scene)
 2. Preloader.js (asset generation)
-3. EndGameScreen.js (game over scene)
-4. Item.js (complete item system)
-5. UIManager.js (comprehensive UI system)
-6. GameScene.js (main gameplay scene)
-7. Player.js
-8. Enemy.js
-9. Fireball.js
-10. FrostNova.js
-11. ChainLightning.js
-12. IceBolt.js
-13. Meteor.js
+3. DeathScreen.js (death/respawn scene)
+4. EndGameScreen.js (game over scene)
+5. CollisionEventBus.js (collision event system)
+6. Collidable.js (base collision class)
+7. CollisionRegistry.js (collision management)
+8. Item.js (complete item system)
+9. UIManager.js (comprehensive UI system)
+10. Fireball.js (and all other skill files)
+11. GameScene.js (main gameplay scene)
+12. Player.js
+13. Enemy.js
 14. WorldGenerator.js
 15. game.js
 
@@ -113,6 +140,10 @@ js/
 │   └── Item.js (complete item system with rarities, properties, potions)
 ├── ui/
 │   └── UIManager.js (handles all UI panels and interactions)
+├── systems/
+│   ├── CollisionEventBus.js (event-driven collision handling)
+│   ├── Collidable.js (base class for collidable entities)
+│   └── CollisionRegistry.js (collision group management)
 ├── skills/
 │   ├── Fireball.js (offensive projectile)
 │   ├── IceBolt.js (piercing ice projectile)
@@ -129,6 +160,7 @@ js/
 │   ├── StartScreen.js (main menu with instructions and atmospheric effects)
 │   ├── Preloader.js (generates all game sprites procedurally)
 │   ├── GameScene.js (main game scene with world transitions and statistics tracking)
+│   ├── DeathScreen.js (death and respawn handling)
 │   └── EndGameScreen.js (game over screen with final statistics and score calculation)
 ├── world/
 │   └── WorldGenerator.js (procedural world generation)

@@ -7,14 +7,15 @@ class GameScene extends Phaser.Scene {
         this.wallColliders = []; // Store wall collider references
         this.isRecreatingUI = false; // Flag to prevent recursive UI recreation
         this.needsEnemyHealthBarRecreation = false; // Flag to mark when enemy health bar needs recreation
+        this.collisionRegistry = null; // Collision system registry
+        this.activePortals = []; // Store active town portals
     }
     
     create(data) {
         // Handle respawn from death screen
         this.respawnInTown = data && data.respawnInTown;
         
-        // Store player frames data from preloader
-        this.playerFrames = data && data.playerFrames;
+        // Player sprite data is now stored in registry by Preloader
         
         // Initialize transition flag
         this.isTransitioning = false;
@@ -37,16 +38,29 @@ class GameScene extends Phaser.Scene {
         
         this.physics.world.setBounds(0, 0, 150 * 32, 150 * 32);
         
-        // Spawn player at town hall
-        const spawnPos = this.worldGenerator.getTownHallSpawnPosition();
-        this.player = new Player(this, spawnPos.x, spawnPos.y, this.playerFrames);
+        // Initialize collision registry
+        this.collisionRegistry = new CollisionRegistry(this);
         
-        // No need for respawn handling in create anymore
-        
-        this.enemies = this.physics.add.group({
+        // Register collision groups
+        this.collisionRegistry.registerGroup(Collidable.Groups.PLAYER);
+        this.collisionRegistry.registerGroup(Collidable.Groups.ENEMY, {
             classType: Enemy,
             runChildUpdate: true
         });
+        this.collisionRegistry.registerGroup(Collidable.Groups.PLAYER_PROJECTILE);
+        this.collisionRegistry.registerGroup(Collidable.Groups.ENEMY_PROJECTILE);
+        this.collisionRegistry.registerGroup(Collidable.Groups.WALL);
+        this.collisionRegistry.registerGroup(Collidable.Groups.ITEM);
+        this.collisionRegistry.registerGroup(Collidable.Groups.PORTAL);
+        this.collisionRegistry.registerGroup(Collidable.Groups.AREA_EFFECT);
+        
+        // Spawn player at town hall
+        const spawnPos = this.worldGenerator.getTownHallSpawnPosition();
+        this.player = new Player(this, spawnPos.x, spawnPos.y);
+        // Don't add player to group - it's a single entity with its own physics body
+        
+        // Get enemy group from registry
+        this.enemies = this.collisionRegistry.getGroup(Collidable.Groups.ENEMY);
         
         // Initialize item drops group
         this.itemDrops = this.add.group();
@@ -67,16 +81,8 @@ class GameScene extends Phaser.Scene {
         // Initialize UI Manager
         this.uiManager = new UIManager(this);
         
-        // Enemies can collide with each other but not with player (so they can attack)
-        this.physics.add.collider(this.enemies, this.enemies);
-        
-        // Add wall collisions and store references
-        if (this.worldWalls && this.worldWalls.children) {
-            // Add proper wall collision for player with smooth sliding
-            const playerWallCollider = this.physics.add.collider(this.player, this.worldWalls);
-            const enemyWallCollider = this.physics.add.collider(this.enemies, this.worldWalls);
-            this.wallColliders.push(playerWallCollider, enemyWallCollider);
-        }
+        // Setup collision rules using the registry
+        this.setupCollisionRules();
         
         // No automatic pickup - items require clicking in Diablo 2 style
         
@@ -84,6 +90,50 @@ class GameScene extends Phaser.Scene {
         this.setupPortalCollision();
         
         // No more periodic spawning - enemies are fixed per world
+    }
+    
+    setupCollisionRules() {
+        // Enemy-enemy collision (physical collision)
+        this.collisionRegistry.addCollisionRule(
+            Collidable.Groups.ENEMY,
+            Collidable.Groups.ENEMY,
+            'collider'
+        );
+        
+        // Player-wall collision
+        if (this.worldWalls && this.worldWalls.children) {
+            // Direct collision setup for static walls
+            this.physics.add.collider(this.player, this.worldWalls);
+            this.physics.add.collider(this.enemies, this.worldWalls);
+        }
+        
+        // Player-enemy overlap (for attack detection)
+        this.physics.add.overlap(this.player, this.enemies, null, null, this);
+        
+        // Projectile collisions
+        this.collisionRegistry.addCollisionRule(
+            Collidable.Groups.PLAYER_PROJECTILE,
+            Collidable.Groups.ENEMY,
+            'overlap'
+        );
+        
+        this.collisionRegistry.addCollisionRule(
+            Collidable.Groups.PLAYER_PROJECTILE,
+            Collidable.Groups.WALL,
+            'collider'
+        );
+        
+        // Enemy projectiles hit player
+        const enemyProjectileGroup = this.collisionRegistry.getGroup(Collidable.Groups.ENEMY_PROJECTILE);
+        if (enemyProjectileGroup) {
+            this.physics.add.overlap(enemyProjectileGroup, this.player, null, null, this);
+        }
+        
+        this.collisionRegistry.addCollisionRule(
+            Collidable.Groups.ENEMY_PROJECTILE,
+            Collidable.Groups.WALL,
+            'collider'
+        );
     }
     
     setupCamera() {
@@ -187,6 +237,10 @@ class GameScene extends Phaser.Scene {
                         if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
                             this.playerTarget = { x: worldPoint.x, y: worldPoint.y };
                             this.createMoveMarker(worldPoint.x, worldPoint.y);
+                            // Clear any portal target when manually moving
+                            if (this.player.targetPortal) {
+                                this.player.targetPortal = null;
+                            }
                         }
                     }
                 }
@@ -272,58 +326,58 @@ class GameScene extends Phaser.Scene {
         this.createInfoPanel();
         this.createEnemyHealthBarUI();
     }
-    
-    
-    
-    
+
+
+
+
     createSkillBar() {
         const skillBarY = this.cameras.main.height - 60;
         const centerX = this.cameras.main.width / 2;
         const skillSlotSize = 40;
         const skillSpacing = 50;
-        
+
         // Skill slots background
         this.skillSlots = this.add.graphics();
         this.skillSlots.setScrollFactor(0).setDepth(1001);
-        
+
         // Fireball skill slot
         const fireballX = centerX - skillSpacing;
         this.skillSlots.fillStyle(0x1a1a1a, 1);
         this.skillSlots.fillRect(fireballX - skillSlotSize/2, skillBarY - skillSlotSize/2, skillSlotSize, skillSlotSize);
         this.skillSlots.lineStyle(2, 0x8b4513, 1);
         this.skillSlots.strokeRect(fireballX - skillSlotSize/2, skillBarY - skillSlotSize/2, skillSlotSize, skillSlotSize);
-        
+
         // Frost Nova skill slot
         const frostX = centerX + skillSpacing;
         this.skillSlots.fillStyle(0x1a1a1a, 1);
         this.skillSlots.fillRect(frostX - skillSlotSize/2, skillBarY - skillSlotSize/2, skillSlotSize, skillSlotSize);
         this.skillSlots.lineStyle(2, 0x8b4513, 1);
         this.skillSlots.strokeRect(frostX - skillSlotSize/2, skillBarY - skillSlotSize/2, skillSlotSize, skillSlotSize);
-        
+
         // Skill icons
         this.fireballIcon = this.add.image(fireballX, skillBarY, 'fireball').setScale(1.5);
         this.fireballIcon.setScrollFactor(0).setDepth(1002);
-        
+
         this.frostIcon = this.add.image(frostX, skillBarY, 'frost').setScale(0.3);
         this.frostIcon.setScrollFactor(0).setDepth(1002);
-        
+
         // Skill labels
         this.add.text(fireballX, skillBarY + 30, 'RMB', {
             fontSize: '12px',
             fill: '#cccccc',
             fontWeight: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
-        
+
         this.add.text(frostX, skillBarY + 30, 'SPACE', {
             fontSize: '12px',
             fill: '#cccccc',
             fontWeight: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1003);
-        
+
         // Cooldown overlays
         this.fireballCooldown = this.add.graphics();
         this.fireballCooldown.setScrollFactor(0).setDepth(1004);
-        
+
         this.frostCooldown = this.add.graphics();
         this.frostCooldown.setScrollFactor(0).setDepth(1004);
     }
@@ -491,6 +545,11 @@ class GameScene extends Phaser.Scene {
     cleanupCurrentWorld() {
         // Store player reference to preserve it
         const playerRef = this.player;
+        
+        // Clean up collision registry
+        if (this.collisionRegistry) {
+            this.collisionRegistry.cleanup();
+        }
         
         // Clean up enemy spawner
         if (this.enemySpawner) {
@@ -676,6 +735,14 @@ class GameScene extends Phaser.Scene {
         
         // Store the overlap handler so we can clean it up later
         this.portalOverlap = this.physics.add.overlap(this.player, this.exitPortalZone, this.handleWorldTransition, null, this);
+        
+        // Listen for portal collision events
+        const eventBus = CollisionEventBus.getInstance();
+        this.portalUnsubscribe = eventBus.on(CollisionEventBus.Events.PLAYER_PORTAL, (data) => {
+            if (data.player === this.player && data.type === 'enter') {
+                // Portal entry handled by collision handler
+            }
+        }, this);
     }
     
     handleWorldTransition() {
@@ -685,6 +752,16 @@ class GameScene extends Phaser.Scene {
         }
         
         this.isTransitioning = true;
+        
+        // Emit world transition event
+        const eventBus = CollisionEventBus.getInstance();
+        eventBus.emit(CollisionEventBus.Events.PLAYER_PORTAL, {
+            player: this.player,
+            portal: this.exitPortalZone,
+            type: 'world_transition',
+            fromWorld: this.currentWorldLevel,
+            toWorld: this.currentWorldLevel + 1
+        });
         
         // Transition to next world
         this.currentWorldLevel++;
@@ -756,6 +833,30 @@ class GameScene extends Phaser.Scene {
                 
                 // Wait a moment before spawning enemies to ensure player is safe
                 this.time.delayedCall(500, () => {
+                    // Reinitialize collision registry for new world
+                    this.collisionRegistry = new CollisionRegistry(this);
+                    
+                    // Re-register collision groups
+                    this.collisionRegistry.registerGroup(Collidable.Groups.PLAYER);
+                    this.collisionRegistry.registerGroup(Collidable.Groups.ENEMY, {
+                        classType: Enemy,
+                        runChildUpdate: true
+                    });
+                    this.collisionRegistry.registerGroup(Collidable.Groups.PLAYER_PROJECTILE);
+                    this.collisionRegistry.registerGroup(Collidable.Groups.ENEMY_PROJECTILE);
+                    this.collisionRegistry.registerGroup(Collidable.Groups.WALL);
+                    this.collisionRegistry.registerGroup(Collidable.Groups.ITEM);
+                    this.collisionRegistry.registerGroup(Collidable.Groups.PORTAL);
+                    this.collisionRegistry.registerGroup(Collidable.Groups.AREA_EFFECT);
+                    
+                    // Don't add player to group - it's a single entity with its own physics body
+                    
+                    // Get enemy group from registry
+                    this.enemies = this.collisionRegistry.getGroup(Collidable.Groups.ENEMY);
+                    
+                    // Setup collision rules
+                    this.setupCollisionRules();
+                    
                     // Setup new portal collision
                     this.setupPortalCollision();
                     
@@ -764,12 +865,6 @@ class GameScene extends Phaser.Scene {
                     
                     // Spawn initial enemies for new world
                     this.spawnInitialEnemies();
-                    
-                    // Re-establish wall collisions for new enemies
-                    if (this.worldWalls && this.worldWalls.children && this.enemies) {
-                        const enemyWallCollider = this.physics.add.collider(this.enemies, this.worldWalls);
-                        this.wallColliders.push(enemyWallCollider);
-                    }
                     
                     // Remove invulnerability after everything is set up
                     this.time.delayedCall(1000, () => {
@@ -799,29 +894,33 @@ class GameScene extends Phaser.Scene {
         
         console.log(`Spawned ${spawned} enemies for world ${this.currentWorldLevel}`);
     }
-    
+
     update(time, delta) {
         if (!this.player.active) {
             this.gameOver();
             return;
         }
-        
+
         // Handle continuous movement when mouse button is held down (only for holds, not clicks)
         if (this.isLeftMouseDown && (this.time.now - this.leftMouseDownTime) >= this.HOLD_THRESHOLD) {
             const hotbarItem = this.player.mouseHotbar ? this.player.mouseHotbar[0] : null;
             if (hotbarItem && hotbarItem.type === 'action' && hotbarItem.name === 'move') {
                 const worldPoint = this.getPlayerCursorWorldPoint();
                 this.playerTarget = { x: worldPoint.x, y: worldPoint.y };
+                // Clear any portal target when manually moving
+                if (this.player.targetPortal) {
+                    this.player.targetPortal = null;
+                }
             }
         }
-        
+
         this.player.update(this.playerTarget);
-        
+
         // Check if player has reached a pending item pickup
         if (this.pendingItemPickup && this.pendingItemPickup.active) {
             const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.pendingItemPickup.x, this.pendingItemPickup.y);
             const pickupRange = 48; // Same range as initial check
-            
+
             if (distance <= pickupRange) {
                 // Player is now close enough - attempt pickup
                 const success = this.uiManager.addItemToInventory(this.pendingItemPickup.itemData);
@@ -836,7 +935,7 @@ class GameScene extends Phaser.Scene {
                         fill: this.pendingItemPickup.itemData.getDisplayName().color,
                         fontWeight: 'bold'
                     }).setOrigin(0.5).setDepth(1000);
-                    
+
                     this.tweens.add({
                         targets: pickupText,
                         y: pickupText.y - 30,
@@ -844,7 +943,7 @@ class GameScene extends Phaser.Scene {
                         duration: 1000,
                         onComplete: () => pickupText.destroy()
                     });
-                    
+
                     this.pendingItemPickup.destroy();
                 } else {
                     // Show "inventory full" message
@@ -853,7 +952,7 @@ class GameScene extends Phaser.Scene {
                         fill: '#ff0000',
                         fontWeight: 'bold'
                     }).setOrigin(0.5).setDepth(1000);
-                    
+
                     this.tweens.add({
                         targets: fullText,
                         y: fullText.y - 30,
@@ -862,25 +961,30 @@ class GameScene extends Phaser.Scene {
                         onComplete: () => fullText.destroy()
                     });
                 }
-                
+
                 // Clear the pending pickup
                 this.pendingItemPickup = null;
                 this.playerTarget = null; // Stop movement
             }
         }
-        
+
+        // Update collision registry
+        if (this.collisionRegistry) {
+            this.collisionRegistry.update();
+        }
+
         // Update enemy hover detection
         this.updateEnemyHover();
-        
+
         // Update ground item hover detection
         this.updateGroundItemHover();
-        
-        
+
+
         // Update new UI system
         if (this.uiManager) {
             this.uiManager.updateUI();
         }
-        
+
         // Throttle UI text updates for performance
         if (!this.lastUIUpdate) this.lastUIUpdate = 0;
         if (time - this.lastUIUpdate > 200) { // Update every 200ms instead of every frame
@@ -888,11 +992,11 @@ class GameScene extends Phaser.Scene {
                 if (this.enemyCount && this.enemyCount.active && this.enemyCount.setText) {
                     this.enemyCount.setText(`Enemies: ${this.enemies.children.entries.length}`);
                 }
-                
+
                 if (this.worldInfo && this.worldInfo.active && this.worldInfo.setText) {
                     this.worldInfo.setText(`World: ${this.currentWorldLevel}`);
                 }
-                
+
                 if (this.fpsText && this.fpsText.active && this.fpsText.setText) {
                     const fps = Math.round(this.game.loop.actualFps);
                     const fpsColor = fps >= 50 ? '#00ff00' : fps >= 30 ? '#ffaa00' : '#ff0000';
@@ -906,9 +1010,9 @@ class GameScene extends Phaser.Scene {
                 this.createInfoPanelElements();
             }
         }
-        
+
     }
-    
+
     updateEnemyHover() {
         // Skip if UI is being recreated
         if (this.isRecreatingUI) {
@@ -1125,8 +1229,21 @@ class GameScene extends Phaser.Scene {
                 
                 // Store the item to pick up once player reaches it
                 this.pendingItemPickup = itemSprite;
+                
+                // Clear any portal target when picking up items
+                if (this.player.targetPortal) {
+                    this.player.targetPortal = null;
+                }
                 return;
             }
+            
+            // Emit item pickup event
+            const eventBus = CollisionEventBus.getInstance();
+            eventBus.emit(CollisionEventBus.Events.PLAYER_ITEM, {
+                player: this.player,
+                item: itemSprite,
+                type: 'pickup_attempt'
+            });
             
             const success = this.uiManager.addItemToInventory(itemSprite.itemData);
             if (success) {
@@ -1150,6 +1267,14 @@ class GameScene extends Phaser.Scene {
                 });
                 
                 itemSprite.destroy();
+                
+                // Emit pickup success event
+                eventBus.emit(CollisionEventBus.Events.PLAYER_ITEM, {
+                    player: this.player,
+                    item: itemSprite,
+                    itemData: itemSprite.itemData,
+                    type: 'pickup_success'
+                });
             } else {
                 // Show "inventory full" message
                 const fullText = this.add.text(itemSprite.x, itemSprite.y - 20, 'Inventory Full!', {
@@ -1238,43 +1363,43 @@ class GameScene extends Phaser.Scene {
         this.groundItemTooltip = null;
         this.hoveredGroundItem = null;
     }
-    
-    
-    
+
+
+
     updateSkillCooldowns(time) {
         const skillBarY = this.cameras.main.height - 60;
         const centerX = this.cameras.main.width / 2;
         const skillSlotSize = 40;
         const skillSpacing = 50;
-        
+
         // Update fireball cooldown
         const fireballCooldown = Math.max(0, this.player.skills.fireball.cooldown - (time - this.player.skills.fireball.lastUsed));
         const fireballPercent = fireballCooldown / this.player.skills.fireball.cooldown;
-        
+
         this.fireballCooldown.clear();
         if (fireballPercent > 0) {
             const fireballX = centerX - skillSpacing;
             this.fireballCooldown.fillStyle(0x000000, 0.7);
             this.fireballCooldown.fillRect(
-                fireballX - skillSlotSize/2, 
-                skillBarY - skillSlotSize/2 + (skillSlotSize * (1 - fireballPercent)), 
-                skillSlotSize, 
+                fireballX - skillSlotSize/2,
+                skillBarY - skillSlotSize/2 + (skillSlotSize * (1 - fireballPercent)),
+                skillSlotSize,
                 skillSlotSize * fireballPercent
             );
         }
-        
+
         // Update frost nova cooldown
         const frostNovaCooldown = Math.max(0, this.player.skills.frostNova.cooldown - (time - this.player.skills.frostNova.lastUsed));
         const frostPercent = frostNovaCooldown / this.player.skills.frostNova.cooldown;
-        
+
         this.frostCooldown.clear();
         if (frostPercent > 0) {
             const frostX = centerX + skillSpacing;
             this.frostCooldown.fillStyle(0x000000, 0.7);
             this.frostCooldown.fillRect(
-                frostX - skillSlotSize/2, 
-                skillBarY - skillSlotSize/2 + (skillSlotSize * (1 - frostPercent)), 
-                skillSlotSize, 
+                frostX - skillSlotSize/2,
+                skillBarY - skillSlotSize/2 + (skillSlotSize * (1 - frostPercent)),
+                skillSlotSize,
                 skillSlotSize * frostPercent
             );
         }
@@ -1324,7 +1449,6 @@ class GameScene extends Phaser.Scene {
             if (this.uiManager) {
                 this.uiManager.updateHealthManaGlobes();
                 this.uiManager.updateExperienceBar();
-                this.uiManager.updateStaminaBar();
             }
             
             // Fade the game scene back in
@@ -1332,4 +1456,135 @@ class GameScene extends Phaser.Scene {
         }
     }
     
+    createTownPortal() {
+        // Check if player already has an active portal
+        if (this.activePortals.length > 0) {
+            // Destroy existing portal(s)
+            this.activePortals.forEach(portal => {
+                if (portal && !portal.destroyed) {
+                    portal.destroyPortal();
+                }
+            });
+            this.activePortals = [];
+        }
+        
+        // Don't allow portal creation if player is dead
+        if (this.player.isDead) {
+            return;
+        }
+        
+        // Don't allow portal creation if player is in town
+        if (this.worldGenerator && this.worldGenerator.isInTown(this.player.x, this.player.y)) {
+            return;
+        }
+        
+        // Create new portal at player position
+        const fieldPortal = new TownPortal(this, this.player.x, this.player.y, false);
+        this.activePortals.push(fieldPortal);
+        
+        // Add portal to collision system
+        if (this.collisionRegistry) {
+            const portalGroup = this.collisionRegistry.getGroup(Collidable.Groups.PORTAL);
+            if (portalGroup) {
+                portalGroup.add(fieldPortal);
+            }
+        }
+        
+        // Play portal creation sound effect (if we had one)
+        // this.sound.play('portal_open');
+    }
+    
+    teleportToTown(returnData) {
+        // Store return data for creating return portal
+        this.townReturnData = returnData;
+        
+        // Transition to town
+        this.isTransitioning = true;
+        
+        // Fade out
+        this.cameras.main.fadeOut(500, 0, 0, 0);
+        
+        this.time.delayedCall(500, () => {
+            // Move player to town hall spawn position
+            const spawnPos = this.worldGenerator.getTownHallSpawnPosition();
+            this.player.x = spawnPos.x;
+            this.player.y = spawnPos.y;
+            
+            // Reset player velocity
+            this.player.body.setVelocity(0, 0);
+            
+            // Clear any active player target
+            this.playerTarget = null;
+            
+            // Check if we already have a return portal in town to avoid duplicates
+            let hasReturnPortal = false;
+            for (const portal of this.activePortals) {
+                if (portal && !portal.destroyed && portal.isReturnPortal) {
+                    hasReturnPortal = true;
+                    break;
+                }
+            }
+            
+            // Only create return portal if we don't already have one
+            if (this.townReturnData && !hasReturnPortal) {
+                const returnPortal = new TownPortal(
+                    this, 
+                    spawnPos.x + 100, // Offset from spawn position
+                    spawnPos.y, 
+                    true, 
+                    this.townReturnData
+                );
+                
+                this.activePortals.push(returnPortal);
+                
+                // Add to collision system
+                if (this.collisionRegistry) {
+                    const portalGroup = this.collisionRegistry.getGroup(Collidable.Groups.PORTAL);
+                    if (portalGroup) {
+                        portalGroup.add(returnPortal);
+                    }
+                }
+            }
+            
+            // Fade back in
+            this.cameras.main.fadeIn(500, 0, 0, 0);
+            this.isTransitioning = false;
+        });
+    }
+    
+    returnFromTown(returnData) {
+        if (!returnData) return;
+        
+        this.isTransitioning = true;
+        
+        // Fade out
+        this.cameras.main.fadeOut(500, 0, 0, 0);
+        
+        this.time.delayedCall(500, () => {
+            // Move player back to original position
+            this.player.x = returnData.x;
+            this.player.y = returnData.y;
+            
+            // Reset player velocity
+            this.player.body.setVelocity(0, 0);
+            
+            // Clear any active player target
+            this.playerTarget = null;
+            
+            // Clear all portals (both field and town portals disappear)
+            this.activePortals.forEach(portal => {
+                if (portal && !portal.destroyed) {
+                    portal.destroyPortal();
+                }
+            });
+            this.activePortals = [];
+            
+            // Clear town return data
+            this.townReturnData = null;
+            
+            // Fade back in
+            this.cameras.main.fadeIn(500, 0, 0, 0);
+            this.isTransitioning = false;
+        });
+    }
 }

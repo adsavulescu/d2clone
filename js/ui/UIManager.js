@@ -96,6 +96,11 @@ class UIManager {
             this.toggleSkillTree();
         });
         
+        // Create town portal with 'T'
+        this.scene.input.keyboard.on('keydown-T', () => {
+            this.createTownPortal();
+        });
+        
         // Keys 1-2 for potion hotbar
         this.scene.input.keyboard.on('keydown-ONE', () => {
             this.usePotionHotbarSlot(0);
@@ -432,7 +437,7 @@ class UIManager {
         this.optionsBarBg.fillRoundedRect(barX - barWidth/2, barY - barHeight/2, barWidth, barHeight, 8);
         this.optionsBarBg.lineStyle(2, 0x8b4513, 1);
         this.optionsBarBg.strokeRoundedRect(barX - barWidth/2, barY - barHeight/2, barWidth, barHeight, 8);
-        this.optionsBarBg.setScrollFactor(0).setDepth(999);
+        this.optionsBarBg.setScrollFactor(0).setDepth(1000);
         
         // Create option buttons
         const buttonWidth = 60;
@@ -452,6 +457,8 @@ class UIManager {
         // Skills button
         this.createOptionButton(startX + buttonSpacing * 2, barY, buttonWidth, buttonHeight, 'SKILL', 'skills');
         
+        // Town Portal button
+        this.createOptionButton(startX + buttonSpacing * 3, barY, buttonWidth, buttonHeight, 'TP', 'townportal');
         
         // Help button
         this.createOptionButton(startX + buttonSpacing * 4, barY, buttonWidth, buttonHeight, 'HELP', 'help');
@@ -523,12 +530,21 @@ class UIManager {
             case 'skills':
                 this.toggleSkillTree();
                 break;
+            case 'townportal':
+                this.createTownPortal();
+                break;
             case 'help':
                 this.toggleHelp();
                 break;
         }
     }
     
+    createTownPortal() {
+        // Call the scene's method to create town portal
+        if (this.scene.createTownPortal) {
+            this.scene.createTownPortal();
+        }
+    }
     
     createHelpPanel() {
         this.helpPanelOpen = false;
@@ -738,24 +754,28 @@ class UIManager {
     showStatsButton() {
         if (this.statsButton) {
             this.statsButton.container.setVisible(true);
+            this.statsButton.zone.setInteractive();
         }
     }
     
     hideStatsButton() {
         if (this.statsButton) {
             this.statsButton.container.setVisible(false);
+            this.statsButton.zone.disableInteractive();
         }
     }
     
     showSkillsButton() {
         if (this.skillsButton) {
             this.skillsButton.container.setVisible(true);
+            this.skillsButton.zone.setInteractive();
         }
     }
     
     hideSkillsButton() {
         if (this.skillsButton) {
             this.skillsButton.container.setVisible(false);
+            this.skillsButton.zone.disableInteractive();
         }
     }
     

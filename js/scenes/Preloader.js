@@ -306,81 +306,8 @@ class Preloader extends Phaser.Scene {
     }
 
     loadPlayerSprites() {
-        // Initialize loading stats
-        this.totalAssetsToLoad = 0;
-        this.assetsLoaded = 0;
-        
-        // Define animation types and their frame counts (sequential, not skipped)
-        const animations = {
-            idle: { frameCount: 263 }, // Goes up to idle_0_263.png
-            run: { frameCount: 21 }, // Goes up to run_0_021.png  
-            walk: { frameCount: 31 }, // Goes up to walk_0_031.png
-            cast: { frameCount: 69 }, // Goes up to cast_0_069.png
-            death: { frameCount: 109 } // Goes up to death_0_109.png  
-        };
-        
-        // Define directions with their angle mapping
-        const directions = {
-            'E': { angle: 0, key: 'right' },
-            'NE': { angle: 45, key: 'upright' },
-            'N': { angle: 90, key: 'up' },
-            'NW': { angle: 135, key: 'upleft' },
-            'W': { angle: 180, key: 'left' },
-            'SW': { angle: 225, key: 'downleft' },
-            'S': { angle: 270, key: 'down' },
-            'SE': { angle: 315, key: 'downright' }
-        };
-        
-        // Initialize player frames storage
-        this.playerFrames = {};
-        
-        // Create a manifest of all assets to load
-        const assetManifest = [];
-        
-        Object.entries(animations).forEach(([animType, animData]) => {
-            this.playerFrames[animType] = {};
-            
-            Object.entries(directions).forEach(([dirName, dirData]) => {
-                const frames = [];
-                
-                // Build frame list for sequential frames
-                for (let i = 1; i <= animData.frameCount; i++) {
-                    const frameNum = String(i).padStart(3, '0');
-                    const framePath = `assets/sprites/player/${animType}/${dirName}/${animType}_${dirData.angle}_${frameNum}.png`;
-                    const frameKey = `player_${animType}_${dirData.key}_${frameNum}`;
-                    
-                    assetManifest.push({
-                        key: frameKey,
-                        url: framePath,
-                        animType: animType,
-                        direction: dirData.key
-                    });
-                    
-                    frames.push(frameKey);
-                }
-                
-                this.playerFrames[animType][dirData.key] = frames;
-            });
-        });
-        
-        // Update total assets count
-        this.totalAssetsToLoad = assetManifest.length;
-        
-        // Load all assets
-        assetManifest.forEach(asset => {
-            this.load.image(asset.key, asset.url);
-        });
-        
-        // Store frame data for later use
-        this.registry.set('playerFrames', this.playerFrames);
-        
-        // Add fallback handling
-        this.load.on('loaderror', (file) => {
-            console.warn(`Failed to load: ${file.key} from ${file.url}`);
-            // Mark this frame as failed
-            if (!this.failedFrames) this.failedFrames = {};
-            this.failedFrames[file.key] = true;
-        });
+        // Load TexturePacker atlas files
+        this.load.multiatlas('player', 'assets/spritesheets/player_data.json', 'assets/spritesheets');
     }
 
     createAssets() {
@@ -2976,7 +2903,28 @@ class Preloader extends Phaser.Scene {
         }
     }
 
+    processPlayerSpritesheets() {
+        // TexturePacker format is automatically processed by Phaser's multiatlas loader
+        // We just need to verify it loaded correctly
+        const playerAtlas = this.textures.exists('player');
+        
+        if (!playerAtlas) {
+            console.error('Failed to load player atlas');
+            return;
+        }
+        
+        // Get all frame names from the atlas
+        const frames = this.textures.get('player').getFrameNames();
+        console.log(`Loaded ${frames.length} player frames from TexturePacker atlas`);
+        
+        // Store a flag indicating we're using TexturePacker format
+        this.registry.set('usingTexturePackerAtlas', true);
+    }
+
     create() {
+        // Process player spritesheet data
+        this.processPlayerSpritesheets();
+        
         // Log loading results
         if (this.failedAssets && this.failedAssets.length > 0) {
             console.warn(`Failed to load ${this.failedAssets.length} assets. Using fallback sprites.`);
@@ -3000,19 +2948,8 @@ class Preloader extends Phaser.Scene {
         // Create backward compatibility textures
         this.createCompatibilityTextures();
         
-        // Validate player frames before proceeding
-        const hasValidFrames = this.validatePlayerFrames();
-        
-        if (!hasValidFrames) {
-            console.warn('No valid player frames found, using procedural sprites');
-            // If no valid frames, create procedural fallback sprites
-            this.createProceduralPlayerSprites();
-        }
-        
-        // Pass player frames data to GameScene
-        this.scene.start('GameScene', { 
-            playerFrames: hasValidFrames ? this.playerFrames : null 
-        });
+        // Pass player sprite data to GameScene
+        this.scene.start('GameScene');
     }
     
     validatePlayerFrames() {

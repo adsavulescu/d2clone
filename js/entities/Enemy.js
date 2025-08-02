@@ -304,7 +304,7 @@ const EnemyTypes = {
 };
 
 // Base Enemy class
-class Enemy extends Phaser.Physics.Arcade.Sprite {
+class Enemy extends Collidable {
     constructor(scene, x, y, enemyType = 'skeleton', level = 1) {
         // Get enemy config based on type
         const config = EnemyTypes[enemyType] || EnemyTypes.skeleton;
@@ -318,6 +318,19 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         
         this.setCollideWorldBounds(true);
+        
+        // Set collision group and mask
+        this.setCollisionGroup(Collidable.Groups.ENEMY);
+        this.setCollisionMask([
+            Collidable.Groups.PLAYER,
+            Collidable.Groups.ENEMY,
+            Collidable.Groups.WALL,
+            Collidable.Groups.PLAYER_PROJECTILE,
+            Collidable.Groups.AREA_EFFECT
+        ]);
+        
+        // Setup collision handlers
+        this.setupCollisionHandlers();
         
         // Update physics body for 3x larger sprites
         // Regular enemies use 72x72 sprites, bosses use 96x96
@@ -1231,6 +1244,29 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         }
     }
     
+    setupCollisionHandlers() {
+        // Handle player collision for melee attacks
+        this.onCollisionEnter = (other, data) => {
+            if (data.group === Collidable.Groups.PLAYER && this.state === 'attacking') {
+                // Attack handled in update method
+            } else if (data.group === Collidable.Groups.PLAYER_PROJECTILE) {
+                // Damage handled by projectile
+            } else if (data.group === Collidable.Groups.AREA_EFFECT) {
+                // Area effect damage handled by skill
+            }
+        };
+        
+        // Subscribe to collision events
+        const eventBus = CollisionEventBus.getInstance();
+        
+        // Listen for being hit by player projectiles
+        eventBus.on(CollisionEventBus.Events.PROJECTILE_ENEMY, (data) => {
+            if (data.obj2 === this && data.type === 'enter') {
+                // Projectile hit handled by projectile class
+            }
+        }, this);
+    }
+    
     takeDamage(amount) {
         // Check if enemy is still active and has a valid scene
         if (!this.scene || !this.scene.time || !this.active) {
@@ -1290,6 +1326,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     destroy() {
+        // Unsubscribe from events
+        const eventBus = CollisionEventBus.getInstance();
+        eventBus.off(CollisionEventBus.Events.PROJECTILE_ENEMY, null, this);
+        
         // Drop experience and possibly items only if not during world transition
         // Add robust null checking to prevent errors during scene transitions
         if (this.scene && this.scene.player && this.scene.player.active && !this.scene.isTransitioning) {

@@ -1,21 +1,39 @@
-class Player extends Phaser.Physics.Arcade.Sprite {
-    constructor(scene, x, y, playerFrames) {
-        super(scene, x, y, 'player');
+class Player extends Collidable {
+    constructor(scene, x, y) {
+        // Start with a default frame from the TexturePacker atlas
+        super(scene, x, y, 'player', 'S/idle_0_001');
         
-        // Store animation frames data
-        this.playerFrames = playerFrames || null;
+        // Check if we're using TexturePacker format
+        this.usingTexturePackerAtlas = scene.registry.get('usingTexturePackerAtlas');
         
         scene.add.existing(this);
         scene.physics.add.existing(this);
         
+        // Set collision group and mask
+        this.setCollisionGroup(Collidable.Groups.PLAYER);
+        this.setCollisionMask([
+            Collidable.Groups.ENEMY,
+            Collidable.Groups.WALL,
+            Collidable.Groups.ITEM,
+            Collidable.Groups.PORTAL,
+            Collidable.Groups.ENEMY_PROJECTILE
+        ]);
+        
+        // Setup collision handlers
+        this.setupCollisionHandlers();
+        
         this.setCollideWorldBounds(true);
-        this.setScale(1.5); // Double the previous size: from 96x96 to 192x192 (128 * 1.5 = 192)
+        this.setScale(0.5); // Scale down from 512x512 to 256x256
         this.setDepth(200); // Ensure player is above everything including town hall
         
-        // Update physics body for scaled sprites (192x192 displayed, but 128x128 actual)
+        // Update physics body for scaled sprites
+        // The sprite is now 256x256 displayed from 512x512 original
         // Use optimal collision box for smooth wall sliding
-        this.body.setSize(21, 21); // Collision box in original sprite space (32 / 1.5 ≈ 21)
-        this.body.setOffset(53.5, 53.5); // Center the collision box (128/2 - 21/2 ≈ 53.5)
+        // Since we're at 0.5 scale, 46px displayed = 92px in original space, 100px displayed = 200px in original space
+        this.body.setSize(92, 200); // Collision box in original sprite space
+        // Center horizontally: (512-92)/2 = 210, then add 4 pixels right (2 displayed = 4 original)
+        // Offset vertically for feet: 156 + 10 pixels down (5 displayed = 10 original)
+        this.body.setOffset(214, 166);
         
         // Configure physics for smooth wall sliding - key settings
         this.body.bounce.set(0); // No bouncing - essential for smooth sliding
@@ -453,103 +471,82 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     }
     
     setupAnimations() {
-        // Create animations for all 8 directions
-        const directions = ['down', 'up', 'left', 'right', 'downleft', 'downright', 'upleft', 'upright'];
+        if (!this.usingTexturePackerAtlas) {
+            console.warn('TexturePacker atlas not loaded');
+            return;
+        }
         
-        if (this.playerFrames) {
-            // Create animations from loaded sprite sheets
-            directions.forEach(dir => {
-                // Run animation
-                if (this.playerFrames.run && this.playerFrames.run[dir] && !this.scene.anims.exists(`sorcerer_run_${dir}`)) {
-                    this.scene.anims.create({
-                        key: `sorcerer_run_${dir}`,
-                        frames: this.playerFrames.run[dir].map(frameKey => ({ key: frameKey })),
-                        frameRate: 24, // 2x speed: 12 -> 24
-                        repeat: -1
-                    });
-                }
+        // Get all available frames from the atlas
+        const allFrames = this.scene.textures.get('player').getFrameNames();
+        
+        // Direction mapping from sprite directions to game directions
+        const directionMap = {
+            'S': 'down',
+            'N': 'up',
+            'E': 'right',
+            'W': 'left',
+            'SE': 'downright',
+            'SW': 'downleft',
+            'NE': 'upright',
+            'NW': 'upleft'
+        };
+        
+        // Animation types with their prefixes in the TexturePacker data
+        const animationTypes = {
+            'idle': 'idle',
+            'walk': 'walk',
+            'run': 'run',
+            'cast': 'cast',
+            'death': 'death'
+        };
+        
+        // Frame rates for each animation
+        const frameRates = {
+            idle: 30,
+            walk: 30,
+            run: 30,
+            cast: 60,    // Cast stays at 60 fps
+            death: 30
+        };
+        
+        // Create animations for each direction and type
+        Object.entries(directionMap).forEach(([spriteDir, gameDir]) => {
+            Object.entries(animationTypes).forEach(([animType, prefix]) => {
+                const animKey = `sorcerer_${animType}_${gameDir}`;
                 
-                // Walk animation
-                if (this.playerFrames.walk && this.playerFrames.walk[dir] && !this.scene.anims.exists(`sorcerer_walk_${dir}`)) {
-                    this.scene.anims.create({
-                        key: `sorcerer_walk_${dir}`,
-                        frames: this.playerFrames.walk[dir].map(frameKey => ({ key: frameKey })),
-                        frameRate: 16, // 2x speed: 8 -> 16
-                        repeat: -1
-                    });
-                }
+                // Skip if animation already exists
+                if (this.scene.anims.exists(animKey)) return;
                 
-                // Idle animation
-                if (this.playerFrames.idle && this.playerFrames.idle[dir] && !this.scene.anims.exists(`sorcerer_idle_${dir}`)) {
-                    this.scene.anims.create({
-                        key: `sorcerer_idle_${dir}`,
-                        frames: this.playerFrames.idle[dir].map(frameKey => ({ key: frameKey })),
-                        frameRate: 16, // 2x speed: 8 -> 16
-                        repeat: -1
-                    });
-                }
+                // Find all frames for this direction and animation
+                // TexturePacker format: "E/cast_90_001", "S/idle_0_001", etc.
+                const framePattern = new RegExp(`^${spriteDir}/${prefix}_\\d+_\\d+$`);
+                const animFrames = allFrames
+                    .filter(frameName => framePattern.test(frameName))
+                    .sort() // They should already be in order due to naming
+                    .map(frameName => ({
+                        key: 'player',
+                        frame: frameName
+                    }));
                 
-                // Cast animation
-                if (this.playerFrames.cast && this.playerFrames.cast[dir] && !this.scene.anims.exists(`sorcerer_cast_${dir}`)) {
+                if (animFrames.length > 0) {
                     this.scene.anims.create({
-                        key: `sorcerer_cast_${dir}`,
-                        frames: this.playerFrames.cast[dir].map(frameKey => ({ key: frameKey })),
-                        frameRate: 128, // 4x speed: 32 -> 128 (2x faster than previous)
-                        repeat: 0
-                    });
-                }
-                
-                // Death animation
-                if (this.playerFrames.death && this.playerFrames.death[dir] && !this.scene.anims.exists(`sorcerer_death_${dir}`)) {
-                    this.scene.anims.create({
-                        key: `sorcerer_death_${dir}`,
-                        frames: this.playerFrames.death[dir].map(frameKey => ({ key: frameKey })),
-                        frameRate: 20, // 2x speed: 10 -> 20
-                        repeat: 0
+                        key: animKey,
+                        frames: animFrames,
+                        frameRate: frameRates[animType] || 10,
+                        repeat: animType === 'death' ? 0 : -1
                     });
                 }
             });
-            
-            // Default idle animation
-            if (this.playerFrames.idle && this.playerFrames.idle.down && !this.scene.anims.exists('sorcerer_idle')) {
-                this.scene.anims.create({
-                    key: 'sorcerer_idle',
-                    frames: this.playerFrames.idle.down.map(frameKey => ({ key: frameKey })),
-                    frameRate: 16, // 2x speed: 8 -> 16
-                    repeat: -1
-                });
-            }
-        } else {
-            // Fallback to single frame animations if no sprite data
-            directions.forEach(dir => {
-                if (!this.scene.anims.exists(`sorcerer_walk_${dir}`)) {
-                    this.scene.anims.create({
-                        key: `sorcerer_walk_${dir}`,
-                        frames: [{ key: `sorcerer_${dir}` }],
-                        frameRate: 8,
-                        repeat: -1
-                    });
-                }
-                
-                if (!this.scene.anims.exists(`sorcerer_idle_${dir}`)) {
-                    this.scene.anims.create({
-                        key: `sorcerer_idle_${dir}`,
-                        frames: [{ key: `sorcerer_${dir}` }],
-                        frameRate: 1,
-                        repeat: 0
-                    });
-                }
+        });
+        
+        // Create a default idle animation
+        if (!this.scene.anims.exists('sorcerer_idle')) {
+            this.scene.anims.create({
+                key: 'sorcerer_idle',
+                frames: [{ key: 'player', frame: 'S/idle_0_001' }],
+                frameRate: 1,
+                repeat: 0
             });
-            
-            // Default idle animation
-            if (!this.scene.anims.exists('sorcerer_idle')) {
-                this.scene.anims.create({
-                    key: 'sorcerer_idle',
-                    frames: [{ key: 'sorcerer_down' }],
-                    frameRate: 1,
-                    repeat: 0
-                });
-            }
         }
         
         // Start with idle animation
@@ -801,6 +798,16 @@ class Player extends Phaser.Physics.Arcade.Sprite {
             return;
         }
         
+        // Check if we have a target portal and we're close enough
+        if (this.targetPortal && !this.targetPortal.destroyed) {
+            const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetPortal.x, this.targetPortal.y);
+            if (distance < 50) { // Close enough to use portal
+                this.targetPortal.handlePortalUse(this);
+                this.targetPortal = null;
+                return;
+            }
+        }
+        
         // Store position before movement for debugging
         
         // Follow Phaser 3 best practice: reset velocity first, then apply movement
@@ -947,11 +954,33 @@ class Player extends Phaser.Physics.Arcade.Sprite {
             this.isCasting = true;
             this.play(castAnim);
             
+            // Clear any existing cast timer
+            if (this.castTimer) {
+                this.castTimer.remove();
+                this.castTimer = null;
+            }
+            
+            // Get animation duration
+            const anim = this.scene.anims.get(castAnim);
+            const duration = anim ? (anim.frames.length / anim.frameRate) * 1000 : 1000;
+            
+            // Set up both animation complete listener and timer as fallback
+            const endCasting = () => {
+                if (this.isCasting) {
+                    this.isCasting = false;
+                    this.play(`sorcerer_idle_${this.currentDirection}`);
+                    if (this.castTimer) {
+                        this.castTimer.remove();
+                        this.castTimer = null;
+                    }
+                }
+            };
+            
             // Return to idle animation when cast is complete
-            this.once('animationcomplete', () => {
-                this.isCasting = false;
-                this.play(`sorcerer_idle_${this.currentDirection}`);
-            });
+            this.once('animationcomplete', endCasting);
+            
+            // Fallback timer in case animation event doesn't fire
+            this.castTimer = this.scene.time.delayedCall(duration, endCasting);
         }
     }
     
@@ -1003,35 +1032,70 @@ class Player extends Phaser.Physics.Arcade.Sprite {
                 let animProgress = 0;
                 
                 if (currentAnim && this.anims.currentFrame) {
+                    // Get the actual frame index within the animation
+                    const currentFrame = this.anims.currentFrame;
+                    const frames = currentAnim.frames;
+                    
+                    // Find the index of the current frame in the animation's frame array
+                    currentFrameIndex = frames.findIndex(f => f === currentFrame);
+                    
                     // Calculate progress as a percentage
-                    currentFrameIndex = this.anims.currentFrame.index;
-                    const totalFrames = currentAnim.frames.length;
-                    animProgress = currentFrameIndex / totalFrames;
+                    if (currentFrameIndex !== -1) {
+                        const totalFrames = frames.length;
+                        animProgress = currentFrameIndex / Math.max(1, totalFrames - 1);
+                    }
                 }
                 
                 // Remove the old animation complete listener to prevent conflicts
                 this.off('animationcomplete');
+                
+                // Clear existing cast timer
+                if (this.castTimer) {
+                    this.castTimer.remove();
+                    this.castTimer = null;
+                }
                 
                 // Start the new direction cast animation
                 this.play(newCastAnim);
                 
                 // Set the animation to the same relative progress
                 if (this.anims.currentAnim && animProgress > 0) {
-                    const newTotalFrames = this.anims.currentAnim.frames.length;
-                    const targetFrame = Math.floor(animProgress * newTotalFrames);
+                    const newFrames = this.anims.currentAnim.frames;
+                    const newTotalFrames = newFrames.length;
+                    
+                    // Calculate target frame based on progress
+                    const targetFrameIndex = Math.round(animProgress * (newTotalFrames - 1));
                     
                     // Ensure targetFrame is within valid bounds
-                    if (targetFrame >= 0 && targetFrame < newTotalFrames && this.anims.currentAnim.frames[targetFrame]) {
+                    if (targetFrameIndex >= 0 && targetFrameIndex < newTotalFrames && newFrames[targetFrameIndex]) {
                         // Jump to the corresponding frame
-                        this.anims.setCurrentFrame(this.anims.currentAnim.frames[targetFrame]);
+                        this.anims.setCurrentFrame(newFrames[targetFrameIndex]);
                     }
                 }
                 
+                // Get animation duration for new timer
+                const anim = this.scene.anims.get(newCastAnim);
+                const currentFrame = targetFrameIndex || 0;
+                const totalFrames = this.anims.currentAnim ? this.anims.currentAnim.frames.length : 1;
+                const remainingDuration = anim ? ((totalFrames - currentFrame) / anim.frameRate) * 1000 : 1000;
+                
+                // Set up both animation complete listener and timer as fallback
+                const endCasting = () => {
+                    if (this.isCasting) {
+                        this.isCasting = false;
+                        this.play(`sorcerer_idle_${this.currentDirection}`);
+                        if (this.castTimer) {
+                            this.castTimer.remove();
+                            this.castTimer = null;
+                        }
+                    }
+                };
+                
                 // Re-add the completion listener for the new animation
-                this.once('animationcomplete', () => {
-                    this.isCasting = false;
-                    this.play(`sorcerer_idle_${this.currentDirection}`);
-                });
+                this.once('animationcomplete', endCasting);
+                
+                // Fallback timer with remaining duration
+                this.castTimer = this.scene.time.delayedCall(remainingDuration, endCasting);
             }
         }
     }
@@ -1044,10 +1108,18 @@ class Player extends Phaser.Physics.Arcade.Sprite {
             let animProgress = 0;
             
             if (currentAnim && this.anims.currentFrame) {
+                // Get the actual frame index within the animation
+                const currentFrame = this.anims.currentFrame;
+                const frames = currentAnim.frames;
+                
+                // Find the index of the current frame in the animation's frame array
+                const currentFrameIndex = frames.findIndex(f => f === currentFrame);
+                
                 // Calculate progress as a percentage
-                const currentFrameIndex = this.anims.currentFrame.index;
-                const totalFrames = currentAnim.frames.length;
-                animProgress = currentFrameIndex / totalFrames;
+                if (currentFrameIndex !== -1) {
+                    const totalFrames = frames.length;
+                    animProgress = currentFrameIndex / Math.max(1, totalFrames - 1);
+                }
             }
             
             // Start the new direction movement animation
@@ -1055,13 +1127,16 @@ class Player extends Phaser.Physics.Arcade.Sprite {
             
             // Set the animation to the same relative progress
             if (this.anims.currentAnim && animProgress > 0) {
-                const newTotalFrames = this.anims.currentAnim.frames.length;
-                const targetFrame = Math.floor(animProgress * newTotalFrames);
+                const newFrames = this.anims.currentAnim.frames;
+                const newTotalFrames = newFrames.length;
+                
+                // Calculate target frame based on progress
+                const targetFrameIndex = Math.round(animProgress * (newTotalFrames - 1));
                 
                 // Ensure targetFrame is within valid bounds
-                if (targetFrame >= 0 && targetFrame < newTotalFrames && this.anims.currentAnim.frames[targetFrame]) {
+                if (targetFrameIndex >= 0 && targetFrameIndex < newTotalFrames && newFrames[targetFrameIndex]) {
                     // Jump to the corresponding frame
-                    this.anims.setCurrentFrame(this.anims.currentAnim.frames[targetFrame]);
+                    this.anims.setCurrentFrame(newFrames[targetFrameIndex]);
                 }
             }
         }
@@ -1374,6 +1449,10 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.castingSkill) {
             this.castingSkill = null;
         }
+        if (this.castTimer) {
+            this.castTimer.remove();
+            this.castTimer = null;
+        }
         
         // Play death animation first
         this.playDeathAnimation();
@@ -1471,7 +1550,36 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         return totalExperience;
     }
     
+    setupCollisionHandlers() {
+        // Handle enemy collisions
+        this.onCollisionEnter = (other, data) => {
+            if (data.group === Collidable.Groups.ENEMY) {
+                // Enemy collision handled by enemy's attack system
+            } else if (data.group === Collidable.Groups.ITEM) {
+                // Item pickup handled by item click system
+            } else if (data.group === Collidable.Groups.PORTAL) {
+                // Portal entry handled by portal overlap
+            } else if (data.group === Collidable.Groups.ENEMY_PROJECTILE) {
+                // Projectile damage handled by projectile
+            }
+        };
+        
+        // Subscribe to collision events if needed
+        const eventBus = CollisionEventBus.getInstance();
+        
+        // Listen for damage events
+        eventBus.on(CollisionEventBus.Events.PROJECTILE_PLAYER, (data) => {
+            if (data.obj2 === this && data.type === 'enter') {
+                // Projectile hit handled by projectile class
+            }
+        }, this);
+    }
+    
     destroy() {
+        // Unsubscribe from events
+        const eventBus = CollisionEventBus.getInstance();
+        eventBus.off(CollisionEventBus.Events.PROJECTILE_PLAYER, null, this);
+        
         super.destroy();
     }
 }

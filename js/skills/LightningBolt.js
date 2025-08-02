@@ -1,4 +1,4 @@
-class LightningBolt extends Phaser.Physics.Arcade.Sprite {
+class LightningBolt extends Collidable {
     constructor(scene, x, y, targetX, targetY, damage) {
         super(scene, x, y, 'chainLightning');
         
@@ -6,6 +6,20 @@ class LightningBolt extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         
         this.damage = damage;
+        
+        // Set collision group and mask
+        this.setCollisionGroup(Collidable.Groups.PLAYER_PROJECTILE);
+        this.setCollisionMask([
+            Collidable.Groups.ENEMY
+        ]);
+        
+        // Setup collision handlers
+        this.setupCollisionHandlers();
+        
+        // Add to collision registry
+        if (scene.collisionRegistry) {
+            scene.collisionRegistry.addToGroup(this, Collidable.Groups.PLAYER_PROJECTILE);
+        }
         this.speed = 800; // Very fast projectile
         this.pierceCount = 0;
         this.maxPierce = 3; // Can hit up to 4 enemies
@@ -27,22 +41,6 @@ class LightningBolt extends Phaser.Physics.Arcade.Sprite {
         scene.time.delayedCall(2000, () => {
             this.destroy();
         });
-        
-        // Collision with enemies
-        scene.physics.add.overlap(this, scene.enemies, (bolt, enemy) => {
-            if (!enemy || !enemy.active || !enemy.scene) {
-                return;
-            }
-            
-            this.hitEnemy(enemy);
-        });
-        
-        // Add wall collision
-        if (scene.worldWalls) {
-            scene.physics.add.collider(this, scene.worldWalls, () => {
-                this.destroy();
-            });
-        }
     }
     
     createLightningTrail() {
@@ -83,6 +81,24 @@ class LightningBolt extends Phaser.Physics.Arcade.Sprite {
         this.pierceCount++;
         if (this.pierceCount >= this.maxPierce) {
             this.destroy();
+        }
+    }
+    
+    setupCollisionHandlers() {
+        this.onCollisionEnter = (other, data) => {
+            if (data.group === Collidable.Groups.ENEMY) {
+                // Check if enemy is still valid before interacting with it
+                if (other && other.active && other.takeDamage) {
+                    this.hitEnemy(other);
+                }
+            }
+        };
+        
+        // Handle wall collision separately
+        if (this.scene.worldWalls) {
+            this.scene.physics.add.collider(this, this.scene.worldWalls, () => {
+                this.destroy();
+            });
         }
     }
     
